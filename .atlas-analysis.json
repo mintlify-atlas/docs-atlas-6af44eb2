@@ -1,0 +1,138 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Aegis Stack",
+  "projectDescription": "CLI for creating and evolving modular full stack Python applications over time, built on tools you already know.",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/components",
+              "concepts/services",
+              "concepts/evolution"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "components/backend",
+              "components/database",
+              "components/scheduler",
+              "components/worker",
+              "components/ingress",
+              "components/frontend"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "services/authentication",
+              "services/ai",
+              "services/communications"
+            ]
+          },
+          {
+            "group": "System Features",
+            "pages": [
+              "features/overseer",
+              "features/cli-interface",
+              "features/illiana"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/adding-components",
+              "guides/removing-components",
+              "guides/updating-stack",
+              "guides/deployment",
+              "guides/integration-patterns"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/init",
+              "cli/add",
+              "cli/remove",
+              "cli/add-service",
+              "cli/remove-service",
+              "cli/update",
+              "cli/components",
+              "cli/services",
+              "cli/deploy",
+              "cli/version"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "About",
+        "groups": [
+          {
+            "group": "Philosophy",
+            "pages": [
+              "about/philosophy",
+              "about/technology",
+              "about/process"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Modular component system (add/remove at any time)",
+    "CLI-driven project scaffolding with Copier templates",
+    "Built-in system visibility via Overseer dashboard",
+    "FastAPI backend with async Python support",
+    "Docker-based development workflow",
+    "Background job processing with workers and scheduler",
+    "Optional AI service with PydanticAI/LangChain",
+    "Authentication service with JWT",
+    "Communications service (email/SMS)",
+    "Live CLI interface for system inspection",
+    "Template versioning and update management"
+  ],
+  "publicApiSurface": [
+    "aegis init",
+    "aegis add",
+    "aegis remove",
+    "aegis add-service",
+    "aegis remove-service",
+    "aegis update",
+    "aegis components",
+    "aegis services",
+    "aegis deploy-init",
+    "aegis deploy-setup",
+    "aegis deploy",
+    "aegis deploy-logs",
+    "aegis deploy-status",
+    "aegis deploy-stop",
+    "aegis deploy-restart",
+    "aegis deploy-shell",
+    "aegis ingress-enable",
+    "aegis version"
+  ]
+}
