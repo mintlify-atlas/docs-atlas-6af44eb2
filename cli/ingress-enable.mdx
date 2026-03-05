@@ -1,0 +1,275 @@
+---
+title: 'ingress-enable'
+description: 'Enable TLS/HTTPS on a project with Let''s Encrypt certificates'
+icon: 'lock'
+---
+
+## Overview
+
+The `ingress-enable` command configures TLS (HTTPS) on an Aegis Stack project using Let's Encrypt certificates via Traefik. If the ingress component is not already added to your project, this command will add it automatically before enabling TLS.
+
+## Syntax
+
+```bash
+aegis ingress-enable [OPTIONS]
+```
+
+## Options
+
+<ParamField path="--domain" type="string">
+  Domain name for the TLS certificate (e.g., `example.com`). Optional for IP-based routing.
+</ParamField>
+
+<ParamField path="--email" type="string">
+  Email address for Let's Encrypt certificate notifications. Required for TLS setup.
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project directory. Defaults to current directory.
+  
+  **Aliases**: `-p`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default="false">
+  Skip all confirmation prompts. Use with caution.
+  
+  **Aliases**: `-y`
+</ParamField>
+
+## What It Does
+
+The `ingress-enable` command performs these steps:
+
+<Steps>
+  <Step title="Verify project setup">
+    Validates that the target directory is a valid Aegis Stack project with git initialized.
+  </Step>
+
+  <Step title="Check ingress component">
+    If the ingress component is not already added, it will be added automatically before enabling TLS.
+  </Step>
+
+  <Step title="Collect TLS configuration">
+    Prompts for domain name and email address (if not provided via flags).
+  </Step>
+
+  <Step title="Update configuration">
+    Updates the project configuration to enable TLS and regenerates:
+    - `docker-compose.yml`
+    - `docker-compose.prod.yml`
+    - `traefik/traefik.yml`
+    - `.env.example`
+  </Step>
+
+  <Step title="Save changes">
+    Updates `.copier-answers.yml` with the new TLS configuration.
+  </Step>
+</Steps>
+
+## Examples
+
+### Enable TLS with a domain
+
+```bash
+aegis ingress-enable --domain example.com --email admin@example.com
+```
+
+This configures TLS for `example.com` with Let's Encrypt notifications sent to `admin@example.com`.
+
+### Enable TLS for existing project
+
+```bash
+aegis ingress-enable --project-path ../my-api --domain api.example.com --yes
+```
+
+Enables TLS for a project in a different directory, skipping confirmation prompts.
+
+### Interactive mode
+
+```bash
+aegis ingress-enable
+```
+
+Runs in interactive mode, prompting for domain and email if not already configured.
+
+### IP-based routing (no domain)
+
+```bash
+aegis ingress-enable --email admin@example.com
+```
+
+Enables HTTPS without a specific domain, useful for IP-based or PathPrefix routing.
+
+## Interactive Prompts
+
+When run without flags, the command will prompt for:
+
+1. **Add ingress component?** (if not already added) - Default: Yes
+2. **Domain name** - Optional, leave empty for IP-based routing
+3. **Email for Let's Encrypt** - Required for certificate notifications
+4. **Confirm configuration** - Review and confirm before applying changes
+
+## Configuration Changes
+
+After running this command, your project will have:
+
+<AccordionGroup>
+  <Accordion title="Updated docker-compose.yml">
+    The Traefik service will be configured with TLS enabled and Let's Encrypt ACME challenge.
+
+    ```yaml
+    services:
+      traefik:
+        image: traefik:v3.0
+        command:
+          - "--certificatesresolvers.letsencrypt.acme.email=your@email.com"
+          - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ```
+  </Accordion>
+
+  <Accordion title="Updated traefik/traefik.yml">
+    Traefik configuration will include TLS certificate resolvers and HTTPS entry points.
+  </Accordion>
+
+  <Accordion title="Updated .env.example">
+    Environment variables for TLS configuration will be added or updated.
+  </Accordion>
+
+  <Accordion title="Updated .copier-answers.yml">
+    Project answers will include:
+    ```yaml
+    ingress_tls: true
+    ingress_domain: example.com
+    author_email: admin@example.com
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps After Enabling TLS
+
+After successfully enabling TLS, follow these steps:
+
+<Steps>
+  <Step title="Deploy your application">
+    ```bash
+    aegis deploy
+    ```
+  </Step>
+
+  <Step title="Open firewall ports">
+    Ensure ports **80** (HTTP) and **443** (HTTPS) are open on your server:
+    
+    ```bash
+    # Ubuntu/Debian
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    
+    # CentOS/RHEL
+    sudo firewall-cmd --permanent --add-port=80/tcp
+    sudo firewall-cmd --permanent --add-port=443/tcp
+    sudo firewall-cmd --reload
+    ```
+  </Step>
+
+  <Step title="Configure DNS (if using a domain)">
+    Point your DNS A record to your server's IP address:
+    
+    ```
+    example.com.    A    203.0.113.10
+    ```
+    
+    <Note>DNS propagation can take up to 48 hours, but typically completes within a few hours.</Note>
+  </Step>
+
+  <Step title="Verify certificate provisioning">
+    Let's Encrypt certificates are automatically provisioned on the first HTTPS request. Visit your domain:
+    
+    ```bash
+    curl https://example.com/health
+    ```
+    
+    The first request may take a few seconds as the certificate is generated.
+  </Step>
+</Steps>
+
+## Requirements
+
+- **Ingress component**: Will be added automatically if not present
+- **Git repository**: Project must be a git repository (for safe updates)
+- **Valid email**: Required for Let's Encrypt certificate notifications
+- **Domain (optional)**: Not required for IP-based or PathPrefix routing
+
+## Checking Current TLS Status
+
+If TLS is already enabled, the command will display the current configuration:
+
+```bash
+aegis ingress-enable
+
+# Output:
+# TLS is already enabled on this project.
+#    Domain: example.com
+#    ACME email: admin@example.com
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Ingress component not found">
+    The command will automatically add the ingress component if it's missing. If you want to add it manually first:
+    
+    ```bash
+    aegis add ingress
+    aegis ingress-enable --domain example.com --email admin@example.com
+    ```
+  </Accordion>
+
+  <Accordion title="Error: --email is required">
+    Let's Encrypt requires a valid email address for certificate expiration notifications:
+    
+    ```bash
+    aegis ingress-enable --domain example.com --email your@email.com
+    ```
+  </Accordion>
+
+  <Accordion title="Certificate not provisioning">
+    Ensure:
+    - Ports 80 and 443 are open and accessible from the internet
+    - DNS A record points to your server IP (if using a domain)
+    - Traefik service is running: `docker ps | grep traefik`
+    
+    Check Traefik logs:
+    ```bash
+    docker compose logs traefik
+    ```
+  </Accordion>
+
+  <Accordion title="Project not a git repository">
+    Initialize git before running this command:
+    
+    ```bash
+    cd my-project
+    git init
+    git add .
+    git commit -m "Initial commit"
+    aegis ingress-enable
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="aegis add" icon="plus" href="/cli/add">
+    Add components to your project
+  </Card>
+  <Card title="aegis deploy" icon="rocket" href="/cli/deploy">
+    Deploy your project to production
+  </Card>
+  <Card title="Ingress Component" icon="network-wired" href="/components/ingress">
+    Learn more about the Traefik ingress component
+  </Card>
+  <Card title="Deployment Guide" icon="book" href="/guides/deployment">
+    Complete deployment guide with TLS setup
+  </Card>
+</CardGroup>

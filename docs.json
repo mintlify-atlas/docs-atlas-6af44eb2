@@ -94,6 +94,7 @@
               "cli/components",
               "cli/services",
               "cli/deploy",
+              "cli/ingress-enable",
               "cli/version"
             ]
           }
