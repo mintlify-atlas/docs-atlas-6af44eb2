@@ -1,0 +1,551 @@
+---
+title: Updating Your Stack
+description: How to update your Aegis Stack project to the latest template version
+icon: arrow-up
+---
+
+Aegis Stack projects can be updated to newer template versions to get bug fixes, new features, and improvements while preserving your customizations.
+
+## Overview
+
+The `aegis update` command uses Copier's git-aware update mechanism to:
+- Merge template changes into your project
+- Preserve your customizations
+- Create `.rej` files for conflicts that can't be auto-merged
+- Maintain a clean upgrade path
+
+<Note>
+  The `aegis update` command only works with projects generated using Copier (default since v0.2.0).
+</Note>
+
+## Prerequisites
+
+<Steps>
+  <Step title="Clean Git Tree Required">
+    Copier requires a clean git working tree to safely merge changes.
+
+    ```bash
+    git status
+    ```
+
+    If you have uncommitted changes:
+    ```bash
+    git add .
+    git commit -m "Prepare for aegis update"
+    ```
+  </Step>
+
+  <Step title="Check Current Version">
+    ```bash
+    aegis update --dry-run
+    ```
+
+    This shows you:
+    - Current CLI version
+    - Current template version
+    - Target template version
+    - Changelog of what will change
+  </Step>
+</Steps>
+
+## Basic Usage
+
+### Update to Latest Version
+
+By default, updates to match your CLI version:
+
+```bash
+aegis update
+```
+
+Output:
+```
+Aegis Stack - Update Template
+==================================================
+Project: /home/user/my-api
+Git tree is clean
+
+Version Information:
+   Current CLI:      0.3.0
+   Current Template: 0.2.5
+   Target Template:  0.3.0 (current CLI)
+
+Changelog:
+--------------------------------------------------
+* feat: Add observability component
+* fix: Improve scheduler persistence
+* docs: Update component documentation
+--------------------------------------------------
+
+Apply this update? [Y/n]:
+```
+
+### Update to Specific Version
+
+```bash
+aegis update --to-version 0.3.0
+```
+
+Useful when you want to control exactly which version you're updating to.
+
+### Preview Changes (Dry Run)
+
+```bash
+aegis update --dry-run
+```
+
+Shows you what would change without applying the update.
+
+## What Happens During Update
+
+<Steps>
+  <Step title="Backup Point Created">
+    Aegis creates a git tag as a backup:
+    
+    ```bash
+    # Automatic backup tag
+    aegis-backup-20260305-143022
+    ```
+
+    If something goes wrong, you can rollback:
+    ```bash
+    git reset --hard aegis-backup-20260305-143022
+    ```
+  </Step>
+
+  <Step title="Copier Merges Changes">
+    Copier performs a git-aware 3-way merge:
+    - **Your changes** (customizations)
+    - **Old template** (version you generated from)
+    - **New template** (version you're updating to)
+
+    Files that didn't change are left alone.
+  </Step>
+
+  <Step title="Conflicts Marked">
+    If Copier can't auto-merge changes, it creates `.rej` files:
+
+    ```
+    app/core/config.py
+    app/core/config.py.rej  # Conflict markers
+    ```
+
+    You'll need to manually resolve these.
+  </Step>
+
+  <Step title="Post-Generation Tasks">
+    Aegis runs post-generation tasks:
+    - Database migrations (if auth or AI enabled)
+    - Dependency synchronization
+    - File permissions
+  </Step>
+
+  <Step title="Version Updated">
+    The `__aegis_version__` is updated in `app/__init__.py`:
+
+    ```python app/__init__.py
+    __aegis_version__ = "0.3.0"
+    ```
+  </Step>
+</Steps>
+
+## Handling Conflicts
+
+When Copier can't automatically merge changes, it creates conflict files:
+
+### Identifying Conflicts
+
+```bash
+# Aegis shows you which files have conflicts
+Update completed successfully!
+
+Next Steps:
+   1. Review changes: git diff
+   2. Check for conflicts (*.rej files)
+   3. Run tests: make check
+   4. Commit changes: git add . && git commit
+
+⚠️  Merge Conflicts Detected
+--------------------------------------------------
+The following files have conflicts that need manual resolution:
+
+  • app/core/config.py
+    Conflict type: Modified by both
+    Resolution: Review config.py.rej and merge changes
+```
+
+### Resolving Conflicts
+
+<Steps>
+  <Step title="Find .rej Files">
+    ```bash
+    find . -name "*.rej"
+    # Output:
+    # ./app/core/config.py.rej
+    ```
+  </Step>
+
+  <Step title="Review Conflict">
+    Open the `.rej` file to see what couldn't be merged:
+
+    ```diff app/core/config.py.rej
+    <<<<<<< HEAD (your changes)
+    LOG_LEVEL: str = "DEBUG"
+    =======
+    LOG_LEVEL: str = "INFO"  # Template default
+    >>>>>>> template
+    ```
+  </Step>
+
+  <Step title="Edit Source File">
+    Manually edit `app/core/config.py` to resolve the conflict:
+
+    ```python app/core/config.py
+    # Keep your change
+    LOG_LEVEL: str = "DEBUG"
+    ```
+  </Step>
+
+  <Step title="Delete .rej File">
+    ```bash
+    rm app/core/config.py.rej
+    ```
+  </Step>
+
+  <Step title="Test and Commit">
+    ```bash
+    make check
+    git add .
+    git commit -m "Resolve update conflicts"
+    ```
+  </Step>
+</Steps>
+
+## Version Compatibility
+
+Aegis Stack follows semantic versioning:
+
+### Patch Updates (0.2.0 → 0.2.5)
+
+✅ **Compatible** - Bug fixes, no breaking changes
+
+```bash
+aegis update
+# Smooth update, minimal conflicts
+```
+
+### Minor Updates (0.2.0 → 0.3.0)
+
+⚠️ **Review Recommended** - New features, possible API changes
+
+```bash
+aegis update
+# Review changelog carefully
+# May need to update your code
+```
+
+### Major Updates (0.x.x → 1.x.x)
+
+🚫 **Breaking Changes** - Requires migration
+
+```bash
+aegis update --to-version 1.0.0
+# Read migration guide
+# Expect conflicts to resolve
+```
+
+## Downgrade Protection
+
+Copier doesn't support downgrades:
+
+```bash
+# If you're on 0.3.0, trying to go to 0.2.0:
+aegis update --to-version 0.2.0
+
+Downgrade not supported
+   Current: abc12345...
+   Target:  def67890...
+   Copier does not support downgrading to older template versions.
+```
+
+To use an older version, regenerate the project:
+```bash
+uvx aegis-stack@0.2.0 init my-api
+```
+
+## Command Options
+
+### Update to Specific Version
+
+```bash
+aegis update --to-version 0.3.0
+```
+
+### Dry Run Mode
+
+Preview changes without applying:
+
+```bash
+aegis update --dry-run
+```
+
+### Custom Project Path
+
+```bash
+aegis update --project-path ../my-api
+```
+
+### Custom Template Path
+
+Update from a local template (for development):
+
+```bash
+aegis update --template-path ~/workspace/aegis-stack
+```
+
+Or using environment variable:
+```bash
+export AEGIS_TEMPLATE_PATH=~/workspace/aegis-stack
+aegis update
+```
+
+### Skip Confirmation
+
+```bash
+aegis update --yes
+```
+
+Useful for CI/CD pipelines.
+
+## Rolling Back Updates
+
+If an update goes wrong:
+
+### Automatic Rollback
+
+If the update fails, Aegis offers to rollback:
+
+```bash
+Update failed: ...
+
+Rollback to previous state? [Y/n]: y
+✓ Rolled back to aegis-backup-20260305-143022
+```
+
+### Manual Rollback
+
+```bash
+# List backup tags
+git tag | grep aegis-backup
+
+# Rollback to backup
+git reset --hard aegis-backup-20260305-143022
+
+# Clean up backup tag
+git tag -d aegis-backup-20260305-143022
+```
+
+## Update Workflow
+
+<Steps>
+  <Step title="Check Status">
+    ```bash
+    aegis update --dry-run
+    ```
+  </Step>
+
+  <Step title="Create Backup">
+    ```bash
+    git add .
+    git commit -m "Before update to 0.3.0"
+    ```
+  </Step>
+
+  <Step title="Run Update">
+    ```bash
+    aegis update
+    ```
+  </Step>
+
+  <Step title="Review Changes">
+    ```bash
+    git diff
+    ```
+  </Step>
+
+  <Step title="Resolve Conflicts">
+    ```bash
+    # Fix any .rej files
+    find . -name "*.rej"
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    ```bash
+    uv sync
+    ```
+  </Step>
+
+  <Step title="Test">
+    ```bash
+    make check
+    make serve
+    ```
+  </Step>
+
+  <Step title="Commit">
+    ```bash
+    git add .
+    git commit -m "Update to aegis-stack 0.3.0"
+    ```
+  </Step>
+</Steps>
+
+## Staying Current
+
+### Check for Updates
+
+Compare your CLI version with your project:
+
+```bash
+aegis update --dry-run
+```
+
+### Update CLI
+
+Update your CLI to the latest version:
+
+```bash
+uvx --force aegis-stack@latest update
+```
+
+Or with uv tool:
+```bash
+uv tool upgrade aegis-stack
+```
+
+### Update Frequency
+
+<CardGroup cols={2}>
+  <Card title="Patch Updates" icon="bug">
+    **Monthly or as needed**
+    
+    Bug fixes and minor improvements. Low risk.
+  </Card>
+  
+  <Card title="Minor Updates" icon="sparkles">
+    **Quarterly**
+    
+    New features. Review changelog before updating.
+  </Card>
+  
+  <Card title="Major Updates" icon="rocket">
+    **As needed**
+    
+    Breaking changes. Plan migration time.
+  </Card>
+  
+  <Card title="Security Updates" icon="shield">
+    **Immediately**
+    
+    Security fixes should be applied ASAP.
+  </Card>
+</CardGroup>
+
+## Real-World Examples
+
+### Stay Current with CLI
+
+```bash
+# You: uvx aegis-stack init my-api (uses CLI 0.3.0)
+# Project generated with template 0.3.0
+
+# 3 months later, CLI updated to 0.4.0
+uvx aegis-stack@latest update
+
+# Project updated to 0.4.0
+```
+
+### Update Legacy Project
+
+```bash
+# Project on 0.2.0, CLI on 0.3.0
+cd my-old-api
+aegis update
+
+# Review changelog
+# Fix conflicts
+# Test thoroughly
+```
+
+### Development Workflow
+
+```bash
+# Test unreleased template changes
+export AEGIS_TEMPLATE_PATH=~/workspace/aegis-stack
+aegis update --dry-run
+
+# Apply and test
+aegis update
+```
+
+## Troubleshooting
+
+### Git Tree Not Clean
+
+```bash
+Error: Git tree is not clean
+   Commit or stash your changes before running 'aegis update'.
+```
+
+**Solution**: Commit your changes
+```bash
+git add .
+git commit -m "WIP: before update"
+```
+
+### Version Mismatch Warning
+
+```bash
+Version Mismatch Detected
+==================================================
+CLI Version:      0.3.0
+Project Version:  0.2.0
+```
+
+**Solution**: Run `aegis update` to sync versions
+
+### Many Conflicts
+
+If you have extensive customizations:
+
+1. **Review conflicts carefully** - Don't blindly accept template changes
+2. **Test incrementally** - Fix and test each conflict
+3. **Consider manual merge** - For heavily customized files, manually apply template changes
+
+### Update Failed
+
+```bash
+Update failed: ...
+```
+
+Check:
+1. **Git status** - Is the tree clean?
+2. **Network** - Can you reach GitHub?
+3. **Permissions** - Can you write to the project directory?
+
+## Next Steps
+
+After updating:
+
+1. **Test Locally**: `make serve` and manually test
+2. **Run Test Suite**: `make check`
+3. **Review Changelog**: Check GitHub releases for breaking changes
+4. **Update Dependencies**: `uv sync`
+5. **Deploy**: Deploy to staging first, then production
+
+<Card title="Related" icon="book">
+  - [Adding Components](/guides/adding-components)
+  - [Removing Components](/guides/removing-components)
+  - [CLI Reference](/cli/init)
+</Card>

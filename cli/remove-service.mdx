@@ -1,0 +1,326 @@
+---
+title: 'aegis remove-service'
+description: 'Remove services from an existing Aegis Stack project'
+---
+
+## Command Syntax
+
+```bash
+aegis remove-service [SERVICES] [OPTIONS]
+```
+
+## Description
+
+Remove services from an existing Aegis Stack project. This command removes service files and updates project configuration.
+
+<Warning>
+**This operation deletes files and cannot be easily undone!**
+
+Always commit your changes before running this command.
+
+Note: Removing a service does NOT remove its required components or database tables.
+</Warning>
+
+## Arguments
+
+<ParamField path="SERVICES" type="string">
+  Comma-separated list of services to remove.
+  
+  Available services: `auth`, `ai`
+</ParamField>
+
+## Options
+
+<ParamField path="--interactive" type="boolean" default={false}>
+  Use interactive service selection.
+  
+  **Aliases:** `-i`
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+<ParamField path="--force" type="boolean" default={false}>
+  Force through version mismatch warnings.
+  
+  **Aliases:** `-f`
+</ParamField>
+
+## Examples
+
+### Remove a service
+
+```bash
+aegis remove-service auth
+```
+
+Removes the authentication service from your project.
+
+### Remove multiple services
+
+```bash
+aegis remove-service auth,ai
+```
+
+Removes both auth and AI services.
+
+### Interactive mode
+
+```bash
+aegis remove-service --interactive
+```
+
+Opens an interactive menu to select services for removal.
+
+### Remove from specific project
+
+```bash
+aegis remove-service auth --project-path ../my-project
+```
+
+Removes auth from a project in a different directory.
+
+### Verbose output
+
+```bash
+aegis --verbose remove-service auth
+```
+
+Shows detailed file operations during removal.
+
+## What Gets Removed
+
+When you remove a service, Aegis will:
+
+1. **Delete service files** - Service implementation, models, and tests
+2. **Update configuration** - `pyproject.toml`, `docker-compose.yml`, `.copier-answers.yml`
+3. **Remove dependencies** - Service-specific Python packages from `pyproject.toml`
+4. **Remove entrypoints** - CLI commands for the service
+
+<Warning>
+**What is NOT removed:**
+
+- **Database tables** - Service data remains in the database
+- **Alembic migrations** - Migration files are not deleted
+- **Required components** - Database, scheduler, etc. remain
+- **Environment variables** - Manual cleanup needed
+
+You must manually clean these up if desired.
+</Warning>
+
+## Auth Service Removal
+
+When removing the auth service:
+
+```bash
+$ aegis remove-service auth
+
+Aegis Stack - Remove Services
+==================================================
+Project: /home/user/my-app
+
+Services to remove:
+   • auth: User authentication with JWT tokens
+
+IMPORTANT: Auth Service Warning
+   Removing auth service will delete:
+   • User authentication API endpoints
+   • User model and authentication services
+   • JWT token handling code
+   Note: Database tables and alembic migrations are NOT deleted.
+
+WARNING: This will DELETE service files from your project!
+
+Remove these services? [y/N]: y
+
+Removing services...
+
+Removing service: auth...
+   Removed 15 files
+
+Services removed successfully!
+
+Note: Service dependencies (database, etc.) were NOT removed.
+Use 'aegis remove <component>' to remove components separately.
+
+Next Steps:
+   1. Review changes: git diff
+   2. Install dependencies: make install
+   3. Restart services: make dev
+```
+
+### Manual Cleanup for Auth
+
+After removing auth service, you may want to:
+
+1. **Drop database tables** (optional):
+```sql
+DROP TABLE users;
+DROP TABLE alembic_version;
+```
+
+2. **Remove environment variables** from `.env`:
+```bash
+# Remove these lines
+SECRET_KEY=...
+ACCESS_TOKEN_EXPIRE_MINUTES=...
+```
+
+3. **Delete migration files** (optional):
+```bash
+rm alembic/versions/*_users.py
+```
+
+## AI Service Removal
+
+When removing the AI service:
+
+```bash
+$ aegis remove-service ai
+
+Removing service: ai...
+   Removed 12 files
+
+Services removed successfully!
+```
+
+### Manual Cleanup for AI
+
+After removing AI service:
+
+1. **Remove environment variables** from `.env`:
+```bash
+# Remove these lines
+AI_PROVIDER=openai
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+GOOGLE_API_KEY=...
+GROQ_API_KEY=...
+```
+
+2. **Drop conversation tables** (if using SQLite backend):
+```sql
+DROP TABLE conversations;
+DROP TABLE messages;
+```
+
+## Components vs Services
+
+<Note>
+**Understanding the difference:**
+
+- **Components** are infrastructure (redis, database, worker)
+- **Services** are business logic (auth, AI) built on components
+
+Removing a service does NOT remove its component dependencies:
+
+```bash
+# This removes auth service but keeps database
+aegis remove-service auth
+
+# To also remove database component:
+aegis remove database
+```
+</Note>
+
+## Service Not Enabled
+
+If you try to remove a service that's not enabled:
+
+```bash
+$ aegis remove-service ai
+
+Not enabled: ai
+No services to remove!
+```
+
+## Safety Checklist
+
+Before removing services:
+
+<CardGroup cols={2}>
+  <Card title="Commit Changes" icon="code-commit">
+    ```bash
+    git add .
+    git commit -m "Before removing auth"
+    ```
+  </Card>
+  <Card title="Backup Database" icon="database">
+    Backup your database if it contains important service data
+  </Card>
+  <Card title="Document API Changes" icon="book">
+    Note which endpoints will be removed
+  </Card>
+  <Card title="Update Frontend" icon="browser">
+    Remove frontend code that calls removed service endpoints
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Undo a removal
+
+If you removed a service by mistake:
+
+```bash
+# Revert using git
+git checkout .
+
+# Or re-add the service
+aegis add-service auth
+```
+
+### Import errors after removal
+
+If your code imports the removed service:
+
+```python
+# This will fail after removing auth
+from app.auth.service import authenticate_user
+```
+
+Search for imports and remove them:
+
+```bash
+# Find auth imports
+grep -r "from app.auth" app/
+
+# Find AI imports
+grep -r "from app.ai" app/
+```
+
+### Database migration conflicts
+
+If you re-add a service after removing it, you may have migration conflicts. Options:
+
+1. **Reset migrations** (loses data):
+```bash
+rm -rf alembic/versions/*
+alembic revision --autogenerate -m "Reset schema"
+alembic upgrade head
+```
+
+2. **Keep old migrations** and create new ones as needed
+
+<Tip>
+Use `--verbose` to see exactly which files are being deleted:
+
+```bash
+aegis --verbose remove-service auth
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis add-service`](/cli/add-service) - Add services to project
+- [`aegis remove`](/cli/remove) - Remove components from project
+- [`aegis services`](/cli/services) - List available services

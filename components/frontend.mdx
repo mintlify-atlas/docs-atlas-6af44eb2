@@ -1,0 +1,483 @@
+---
+title: Frontend
+description: Flet-based system dashboard for monitoring and operations
+icon: desktop
+---
+
+The Frontend component provides **Overseer** - a built-in web dashboard for monitoring your Aegis Stack application. View system health, component status, activity logs, and architecture diagrams in real-time.
+
+## What It Does
+
+The Frontend component (Overseer):
+
+- **System Dashboard**: Real-time view of all components and services
+- **Health Monitoring**: Visual status indicators for every part of your stack
+- **Activity Feed**: Live stream of system events and operations
+- **Architecture Diagram**: Visual representation of your system topology
+- **Component Details**: Drill down into metrics and configuration
+- **Dark Mode**: Theme toggle for comfortable viewing
+- **Responsive Design**: Works on desktop, tablet, and mobile
+
+## When To Use
+
+The Frontend is a **core component** that's automatically included in every Aegis Stack project. You cannot remove it.
+
+Use it to:
+- Monitor system health at a glance
+- Debug issues by viewing component status
+- Track system activity in real-time
+- Understand your application's architecture
+- Inspect component-specific metrics
+
+<Note>
+  Overseer is designed for operational visibility. For user-facing interfaces, build your own frontend or use Flet's capabilities to extend Overseer.
+</Note>
+
+## Adding to Your Project
+
+The Frontend component is automatically included:
+
+```bash
+aegis init my-api
+```
+
+It cannot be added or removed separately since it's a core component.
+
+## Accessing Overseer
+
+Once your application is running, access Overseer at:
+
+```
+http://localhost:8000/dashboard
+```
+
+<CardGroup cols={2}>
+  <Card title="Default Views" icon="table-cells">
+    - **Stack View**: Compact overview + activity feed
+    - **Cards View**: Detailed component cards grid
+    - **Diagram View**: Architecture visualization
+  </Card>
+  
+  <Card title="Features" icon="sparkles">
+    - Real-time health updates (30s refresh)
+    - Click cards for detailed modals
+    - Theme toggle (light/dark)
+    - View switcher
+  </Card>
+</CardGroup>
+
+## Configuration
+
+Configure the frontend through environment variables:
+
+```bash
+# Frontend Configuration
+FLET_ASSETS_DIR=assets              # Path to static assets
+PORT=8000                           # Web server port
+```
+
+### Environment Variables
+
+<ResponseField name="FLET_ASSETS_DIR" type="string" default="assets">
+  Directory containing frontend assets (logo, icons, etc.)
+</ResponseField>
+
+<ResponseField name="PORT" type="integer" default="8000">
+  Port where Overseer is accessible (shared with backend)
+</ResponseField>
+
+## Key Files Generated
+
+<CodeGroup>
+```python app/components/frontend/main.py
+import flet as ft
+from app.services.system.models import ComponentStatus
+
+def create_frontend_app() -> Callable:
+    """Create the Flet dashboard application."""
+    
+    async def flet_main(page: ft.Page) -> None:
+        page.title = "Aegis Stack - System Dashboard"
+        
+        # Initialize theme manager
+        theme_manager = ThemeManager(page)
+        await theme_manager.initialize_themes()
+        
+        # Create dashboard components
+        status_overview = StatusOverviewPanel()
+        activity_feed = ActivityFeed()
+        diagram_view = DiagramView()
+        
+        # Component cards
+        cards_container = ft.ResponsiveRow(controls=[])
+        
+        async def refresh_dashboard() -> None:
+            """Fetch and update system status."""
+            response = await http_client.get("http://localhost:8000/health/")
+            data = response.json()
+            
+            # Update all views
+            await update_health_status(data)
+            await update_component_cards(data)
+            await update_activity_feed()
+            page.update()
+        
+        # Auto-refresh every 30 seconds
+        await refresh_dashboard()
+        asyncio.create_task(auto_refresh())
+    
+    return flet_main
+```
+
+```python app/components/frontend/dashboard/cards/server_card.py
+class ServerCard:
+    """Backend server status card."""
+    
+    def __init__(self, component_data: ComponentStatus):
+        self.component_data = component_data
+        self.metadata = component_data.metadata or {}
+    
+    def build(self) -> ft.Container:
+        """Build the server card UI."""
+        return ft.Container(
+            content=ft.Column([
+                create_header_row("Backend", "FastAPI", self.component_data),
+                self._create_metrics_section(),
+            ]),
+            padding=16,
+            border_radius=16,
+            bgcolor=ft.Colors.SURFACE,
+        )
+    
+    def _create_metrics_section(self) -> ft.Container:
+        return ft.Container(
+            content=ft.Column([
+                create_metric_container("Port", self.metadata.get("port", "8000")),
+                create_metric_container("Uptime", self.metadata.get("uptime", "N/A")),
+            ])
+        )
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+app/components/frontend/
+├── __init__.py
+├── main.py                      # Dashboard entry point
+├── theme.py                     # Theme configuration
+├── styles.py                    # Shared styles
+├── controls/                    # Reusable UI components
+│   ├── buttons.py
+│   ├── data_table.py
+│   └── service_card.py
+└── dashboard/
+    ├── activity_feed.py         # System activity log
+    ├── status_overview.py       # Compact status panel
+    ├── cards/                   # Component-specific cards
+    │   ├── server_card.py
+    │   ├── worker_card.py
+    │   ├── database_card.py
+    │   └── ...
+    ├── modals/                  # Detailed component views
+    │   ├── backend_modal.py
+    │   ├── worker_modal.py
+    │   └── ...
+    └── diagram/                 # Architecture visualization
+        ├── diagram_view.py
+        └── diagram_node.py
+```
+
+## Dashboard Views
+
+<Tabs>
+  <Tab title="Stack View">
+    Default view with compact component status and activity feed:
+    
+    - **Left**: Status overview with all components
+    - **Right**: Live activity feed
+    - **Top**: Health indicator with component counts
+    
+    Perfect for quick health checks and monitoring events.
+  </Tab>
+
+  <Tab title="Cards View">
+    Grid of detailed component cards:
+    
+    - **Backend**: Port, uptime, request count
+    - **Database**: Connection status, table counts
+    - **Worker**: Queue depths, throughput
+    - **Scheduler**: Active jobs, next run times
+    
+    Click any card to see full details in a modal.
+  </Tab>
+
+  <Tab title="Diagram View">
+    Visual architecture diagram:
+    
+    - **Components**: Arranged by type
+    - **Connections**: Shows data flow
+    - **Status Colors**: Health at a glance
+    - **Interactive**: Click nodes for details
+    
+    Great for understanding system topology.
+  </Tab>
+</Tabs>
+
+## Customization
+
+### Adding Custom Cards
+
+Create cards for your own components:
+
+<Steps>
+  <Step title="Create card class">
+    ```python app/components/frontend/dashboard/cards/my_card.py
+    from app.services.system.models import ComponentStatus
+    import flet as ft
+    
+    class MyComponentCard:
+        def __init__(self, component_data: ComponentStatus):
+            self.component_data = component_data
+            self.metadata = component_data.metadata or {}
+        
+        def build(self) -> ft.Container:
+            return ft.Container(
+                content=ft.Column([
+                    ft.Text("My Component", size=20, weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Status: {self.component_data.status.value}"),
+                    # Your custom metrics here
+                ]),
+                padding=16,
+                border_radius=16,
+            )
+    ```
+  </Step>
+
+  <Step title="Register in card factory">
+    ```python app/components/frontend/main.py
+    from app.components.frontend.dashboard.cards.my_card import MyComponentCard
+    
+    def create_component_card(component_name: str, component_data: ComponentStatus):
+        if component_name == "my_component":
+            return MyComponentCard(component_data).build()
+        # ... existing cards ...
+    ```
+  </Step>
+
+  <Step title="Provide health data">
+    Ensure your component reports health via `/health/` endpoint.
+  </Step>
+</Steps>
+
+### Theme Customization
+
+Modify colors and styles:
+
+```python app/components/frontend/theme.py
+class AegisTheme:
+    class Colors:
+        # Light mode
+        SURFACE = "#FFFFFF"
+        BACKGROUND = "#F5F5F5"
+        PRIMARY = "#1976D2"
+        
+        # Dark mode
+        SURFACE_DARK = "#1E1E1E"
+        BACKGROUND_DARK = "#121212"
+        PRIMARY_DARK = "#90CAF9"
+```
+
+### Adding Dashboard Pages
+
+Extend Overseer with custom pages:
+
+```python
+# Add a settings page
+settings_tab = ft.Tab(
+    text="Settings",
+    content=SettingsView(),
+)
+
+tabs = ft.Tabs(
+    tabs=[dashboard_tab, settings_tab],
+)
+```
+
+## Integration with Backend
+
+Overseer fetches data from the backend's health endpoint:
+
+```python
+# Backend provides health data
+GET /health/
+
+# Response includes all components
+{
+  "status": "healthy",
+  "components": {
+    "aegis": {
+      "sub_components": {
+        "backend": {...},
+        "database": {...},
+        "worker": {...}
+      }
+    }
+  }
+}
+```
+
+Components register their health checks:
+
+```python app/services/my_service/health.py
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+async def get_health() -> ComponentStatus:
+    """Report component health to Overseer."""
+    try:
+        # Check your component
+        is_healthy = await check_my_component()
+        
+        return ComponentStatus(
+            name="my_component",
+            status=ComponentStatusType.HEALTHY if is_healthy else ComponentStatusType.UNHEALTHY,
+            message="Component is running" if is_healthy else "Component failed",
+            metadata={
+                "version": "1.0.0",
+                "custom_metric": 42,
+            }
+        )
+    except Exception as e:
+        return ComponentStatus(
+            name="my_component",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Health check failed: {e}",
+        )
+```
+
+## Docker Integration
+
+Overseer runs integrated with the backend:
+
+```yaml docker-compose.yml
+services:
+  webserver:
+    build: .
+    command: python -m app.entrypoints.webserver
+    ports:
+      - "8000:8000"
+    environment:
+      - FLET_ASSETS_DIR=assets
+```
+
+Access at: http://localhost:8000/dashboard
+
+## Dependencies
+
+<CardGroup cols={1}>
+  <Card title="Flet" icon="desktop">
+    Python framework for building web UIs
+    ```
+    flet==0.28.3
+    ```
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Real-Time Updates
+
+Overseer auto-refreshes every 30 seconds. To force an immediate refresh:
+
+```python
+# Access refresh function from any modal
+refresh_fn = page.data.get("refresh_dashboard")
+if refresh_fn:
+    await refresh_fn()
+```
+
+### Component Modals
+
+Show detailed info when cards are clicked:
+
+```python
+class MyComponentModal:
+    def __init__(self, component_data: ComponentStatus):
+        self.component_data = component_data
+    
+    def show(self, page: ft.Page):
+        modal = ft.AlertDialog(
+            title=ft.Text("Component Details"),
+            content=ft.Column([
+                ft.Text(f"Status: {self.component_data.status.value}"),
+                ft.Text(f"Message: {self.component_data.message}"),
+                # More details...
+            ]),
+            actions=[ft.TextButton("Close", on_click=lambda _: page.close(modal))],
+        )
+        page.dialog = modal
+        modal.open = True
+        page.update()
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Dashboard not loading">
+    Check the backend is running:
+    ```bash
+    curl http://localhost:8000/health/
+    ```
+    
+    Verify port 8000 is accessible.
+  </Accordion>
+
+  <Accordion title="Components not showing">
+    Ensure components report health via the backend health endpoint. Check backend logs for errors.
+  </Accordion>
+
+  <Accordion title="Assets not loading">
+    Verify `FLET_ASSETS_DIR` points to correct directory:
+    ```
+    assets/
+    ├── overseer.png
+    └── aegis-manifesto.png
+    ```
+  </Accordion>
+
+  <Accordion title="Slow refresh">
+    Reduce refresh interval by modifying `asyncio.sleep(30)` in `auto_refresh()` function.
+  </Accordion>
+</AccordionGroup>
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server" href="/components/backend">
+    Provides health data for Overseer
+  </Card>
+  
+  <Card title="Ingress" icon="network-wired" href="/components/ingress">
+    Expose Overseer to the internet
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customize Theme" icon="palette">
+    Modify colors and styles in `theme.py`
+  </Card>
+  
+  <Card title="Add Custom Cards" icon="grid-2">
+    Create cards for your components
+  </Card>
+  
+  <Card title="Extend Dashboard" icon="plus">
+    Add new tabs or views to Overseer
+  </Card>
+  
+  <Card title="Build User UI" icon="users">
+    Use Flet to build user-facing interfaces
+  </Card>
+</CardGroup>

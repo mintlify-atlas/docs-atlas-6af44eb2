@@ -1,0 +1,186 @@
+---
+title: 'aegis version'
+description: 'Show the Aegis Stack CLI version'
+---
+
+## Command Syntax
+
+```bash
+aegis version
+```
+
+## Description
+
+Show the current version of the Aegis Stack CLI.
+
+## Arguments
+
+None.
+
+## Options
+
+None.
+
+## Example Output
+
+```bash
+$ aegis version
+Aegis Stack CLI v0.3.0
+```
+
+## Version Information
+
+The version number follows [Semantic Versioning](https://semver.org/):
+
+```
+MAJOR.MINOR.PATCH
+```
+
+- **MAJOR:** Breaking changes
+- **MINOR:** New features (backward compatible)
+- **PATCH:** Bug fixes (backward compatible)
+
+## Checking for Updates
+
+To check if a newer version is available:
+
+```bash
+# Using uvx (recommended)
+uvx --upgrade aegis-stack version
+
+# Using pip
+pip install --upgrade aegis-stack
+aegis version
+```
+
+## Version Compatibility
+
+### CLI vs Template Version
+
+Your CLI version should match your project's template version:
+
+```bash
+# Check CLI version
+aegis version
+
+# Check project template version
+cat .copier-answers.yml | grep aegis_version
+```
+
+### Updating Both
+
+```bash
+# 1. Update CLI
+uvx --upgrade aegis-stack
+
+# 2. Update project template
+aegis update
+```
+
+## Version History
+
+View the full changelog on GitHub:
+- [Releases](https://github.com/lbedner/aegis-stack/releases)
+- [Changelog](https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md)
+
+## Using Specific Versions
+
+### Install Specific CLI Version
+
+```bash
+# Using uvx
+uvx aegis-stack@0.3.0 version
+
+# Using pip
+pip install aegis-stack==0.3.0
+```
+
+### Generate from Specific Template Version
+
+```bash
+aegis init my-app --to-version 0.3.0
+```
+
+### Update to Specific Version
+
+```bash
+aegis update --to-version 0.3.0
+```
+
+## Version Commands
+
+### Get Version Programmatically
+
+```bash
+# Just the version number
+aegis version | grep -oP '\d+\.\d+\.\d+'
+
+# Store in variable
+VERSION=$(aegis version | grep -oP '\d+\.\d+\.\d+')
+echo $VERSION
+```
+
+### Compare Versions
+
+```bash
+# Check if version is at least 0.3.0
+CURRENT=$(aegis version | grep -oP '\d+\.\d+\.\d+')
+if [ "$(printf '%s\n' "0.3.0" "$CURRENT" | sort -V | head -n1)" = "0.3.0" ]; then
+    echo "Version is 0.3.0 or higher"
+fi
+```
+
+## Python API
+
+Access version in Python:
+
+```python
+import aegis
+
+print(aegis.__version__)  # e.g., "0.3.0"
+```
+
+## Related Commands
+
+- [`aegis update`](/cli/update) - Update project to newer template version
+- [`aegis init`](/cli/init) - Initialize project with specific version
+
+## Troubleshooting
+
+### Version Mismatch Warning
+
+If you see a version mismatch warning:
+
+```
+Warning: CLI version (0.3.0) does not match project template (0.2.0)
+```
+
+Options:
+1. **Update project:** `aegis update`
+2. **Update CLI:** `uvx --upgrade aegis-stack`
+3. **Force through:** Use `--force` flag
+
+### Cannot Determine Version
+
+If `aegis version` fails:
+
+```bash
+# Reinstall CLI
+pip uninstall aegis-stack
+pip install aegis-stack
+
+# Or using uvx
+uvx --reinstall aegis-stack version
+```
+
+<Tip>
+Run `aegis version` in your CI/CD pipeline to ensure consistent versions:
+
+```yaml
+# .github/workflows/test.yml
+- name: Check Aegis version
+  run: |
+    uvx aegis-stack version
+    aegis version
+```
+</Tip>

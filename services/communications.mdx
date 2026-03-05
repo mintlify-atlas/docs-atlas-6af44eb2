@@ -1,0 +1,721 @@
+---
+title: Communications Service
+description: Multi-channel communications with email (Resend), SMS (Twilio), and voice call capabilities
+icon: paper-plane
+---
+
+The Communications service provides production-ready email, SMS, and voice call capabilities through best-in-class providers: Resend for email and Twilio for SMS/voice.
+
+## Overview
+
+The communications service includes:
+
+- **Email**: Send transactional emails via Resend with HTML/text support
+- **SMS**: Send text messages via Twilio with delivery tracking
+- **Voice**: Make phone calls via Twilio with TwiML support
+- **Webhooks**: Handle delivery status callbacks from providers
+- **Health monitoring**: Real-time configuration and status checks
+
+<Note>
+The communications service requires the **backend** component. No database is required unless you want to store message logs.
+</Note>
+
+## Adding Communications to Your Project
+
+Add the communications service to a new or existing project:
+
+<CodeGroup>
+```bash New Project
+aegis init my-app --services comms
+cd my-app
+```
+
+```bash Existing Project
+aegis add-service comms --project-path ./my-app
+```
+</CodeGroup>
+
+The service includes:
+
+- Email service (`app/services/comms/email.py`)
+- SMS service (`app/services/comms/sms.py`)
+- Voice call service (`app/services/comms/call.py`)
+- Data models (`app/services/comms/models.py`)
+- Webhook handlers (`app/services/comms/webhooks.py`)
+- API routes (`app/components/backend/api/comms/router.py`)
+
+## Provider Setup
+
+### Resend (Email)
+
+<Steps>
+  <Step title="Sign up for Resend">
+    Create a free account at [resend.com](https://resend.com). Free tier includes 100 emails/day.
+  </Step>
+  
+  <Step title="Get your API key">
+    Navigate to **API Keys** in the Resend dashboard and create a new key.
+  </Step>
+  
+  <Step title="Verify your domain (production)">
+    For production use, verify your sending domain in the Resend dashboard. Development uses `onboarding@resend.dev`.
+  </Step>
+  
+  <Step title="Configure environment">
+    Add your credentials to `.env`:
+    
+    ```bash
+    RESEND_API_KEY=re_xxxxxxxxxxxx
+    RESEND_FROM_EMAIL=noreply@yourdomain.com
+    ```
+  </Step>
+</Steps>
+
+### Twilio (SMS/Voice)
+
+<Steps>
+  <Step title="Sign up for Twilio">
+    Create a free account at [twilio.com/try-twilio](https://twilio.com/try-twilio). Get $15 trial credit.
+  </Step>
+  
+  <Step title="Get credentials">
+    Find your **Account SID** and **Auth Token** in the Twilio Console dashboard.
+  </Step>
+  
+  <Step title="Get a phone number">
+    Purchase a toll-free number to stay on trial (avoids A2P 10DLC registration fees).
+    
+    1. Go to **Phone Numbers** → **Buy a Number**
+    2. Select **Toll-Free** number type
+    3. Purchase the number
+  </Step>
+  
+  <Step title="Create Messaging Service (SMS)">
+    For SMS, create a Messaging Service:
+    
+    1. Go to **Messaging** → **Services**
+    2. Create new Messaging Service
+    3. Add your toll-free number as sender
+    4. Copy the **Messaging Service SID**
+  </Step>
+  
+  <Step title="Configure environment">
+    Add credentials to `.env`:
+    
+    ```bash
+    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TWILIO_PHONE_NUMBER=+18001234567
+    TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+**Trial account limitations:**
+- SMS/Voice can only send to verified phone numbers
+- SMS includes "Sent from your Twilio trial account" prefix
+- Upgrade to remove restrictions
+</Warning>
+
+## Configuration
+
+Configure communications settings in your `.env` file:
+
+```bash .env
+# Email Configuration (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_FROM_EMAIL=noreply@yourdomain.com  # Must be verified domain
+
+# SMS/Voice Configuration (Twilio)
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_PHONE_NUMBER=+18001234567  # Your Twilio phone number
+TWILIO_MESSAGING_SERVICE_SID=MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # Required for SMS
+```
+
+## API Endpoints
+
+### Send Email
+
+```http
+POST /api/v1/comms/email/send
+```
+
+Send a transactional email via Resend.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/comms/email/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": ["user@example.com"],
+    "subject": "Welcome to Aegis Stack",
+    "html": "<h1>Welcome!</h1><p>Thanks for signing up.</p>"
+  }'
+```
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/comms/email/send",
+        json={
+            "to": ["user@example.com"],
+            "subject": "Password Reset",
+            "html": "<p>Click here to reset your password...</p>"
+        }
+    )
+    data = response.json()
+    print(f"Email sent: {data['id']}")
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField path="to" type="array" required>
+  List of recipient email addresses
+</ParamField>
+
+<ParamField path="subject" type="string" required>
+  Email subject line
+</ParamField>
+
+<ParamField path="html" type="string">
+  HTML email body (either html or text required)
+</ParamField>
+
+<ParamField path="text" type="string">
+  Plain text email body (either html or text required)
+</ParamField>
+
+<ParamField path="from_email" type="string">
+  Sender email (defaults to RESEND_FROM_EMAIL)
+</ParamField>
+
+<ParamField path="reply_to" type="array">
+  Reply-to addresses
+</ParamField>
+
+<ParamField path="cc" type="array">
+  CC recipients
+</ParamField>
+
+<ParamField path="bcc" type="array">
+  BCC recipients
+</ParamField>
+
+<ParamField path="tags" type="array">
+  Email tags for tracking and analytics
+</ParamField>
+
+**Response:**
+```json
+{
+  "id": "re_abc123def456",
+  "to": ["user@example.com"],
+  "status": "sent",
+  "message": "Email sent successfully"
+}
+```
+
+### Send SMS
+
+```http
+POST /api/v1/comms/sms/send
+```
+
+Send an SMS message via Twilio.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/comms/sms/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "+15551234567",
+    "body": "Your verification code is 123456"
+  }'
+```
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/comms/sms/send",
+        json={
+            "to": "+15551234567",
+            "body": "Your order has been shipped! Track: https://..."
+        }
+    )
+    data = response.json()
+    print(f"SMS sent: {data['sid']}")
+```
+</CodeGroup>
+
+**Request Body:**
+
+<ParamField path="to" type="string" required>
+  Recipient phone number in E.164 format (+15551234567)
+</ParamField>
+
+<ParamField path="body" type="string" required>
+  SMS message body (max 1600 characters)
+</ParamField>
+
+<ParamField path="from_number" type="string">
+  Sender phone number (defaults to TWILIO_PHONE_NUMBER)
+</ParamField>
+
+<ParamField path="status_callback" type="string">
+  URL to receive delivery status updates
+</ParamField>
+
+**Response:**
+```json
+{
+  "sid": "SM1234567890abcdef1234567890abcdef",
+  "to": "+15551234567",
+  "status": "sent",
+  "segments": 1,
+  "message": "SMS sent successfully"
+}
+```
+
+<Note>
+SMS messages are split into segments of 160 characters (GSM-7) or 70 characters (Unicode). The response includes the segment count for billing purposes.
+</Note>
+
+### Make Voice Call
+
+```http
+POST /api/v1/comms/call/make
+```
+
+Initiate a phone call via Twilio with TwiML instructions.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/comms/call/make \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "+15551234567",
+    "twiml_url": "https://yourapp.com/twiml/greeting.xml"
+  }'
+```
+
+**Request Body:**
+
+<ParamField path="to" type="string" required>
+  Recipient phone number in E.164 format
+</ParamField>
+
+<ParamField path="twiml_url" type="string" required>
+  URL returning TwiML instructions for the call
+</ParamField>
+
+<ParamField path="from_number" type="string">
+  Caller ID (defaults to TWILIO_PHONE_NUMBER)
+</ParamField>
+
+<ParamField path="status_callback" type="string">
+  URL to receive call status updates
+</ParamField>
+
+<ParamField path="timeout" type="integer">
+  Seconds to wait for answer (5-600, default: 30)
+</ParamField>
+
+**Response:**
+```json
+{
+  "sid": "CA1234567890abcdef1234567890abcdef",
+  "to": "+15551234567",
+  "status": "queued",
+  "message": "Call initiated successfully"
+}
+```
+
+### Health Check
+
+```http
+GET /api/v1/comms/health
+```
+
+Check communications service health and configuration status.
+
+```bash
+curl http://localhost:8000/api/v1/comms/health
+```
+
+**Response:**
+```json
+{
+  "service": "communications",
+  "status": "healthy",
+  "channels": {
+    "email": {
+      "configured": true,
+      "provider": "resend",
+      "errors": []
+    },
+    "sms": {
+      "configured": true,
+      "provider": "twilio",
+      "errors": []
+    },
+    "voice": {
+      "configured": true,
+      "provider": "twilio",
+      "errors": []
+    }
+  },
+  "total_errors": 0
+}
+```
+
+### Service Status
+
+```http
+GET /api/v1/comms/status
+```
+
+Get detailed configuration status for each channel.
+
+```bash
+curl http://localhost:8000/api/v1/comms/status
+```
+
+## Usage Examples
+
+### Welcome Email
+
+```python
+from app.services.comms.email import send_email_simple
+
+async def send_welcome_email(user_email: str, user_name: str):
+    """Send welcome email to new user."""
+    html = f"""
+    <html>
+      <body>
+        <h1>Welcome to Aegis Stack, {user_name}!</h1>
+        <p>Thanks for signing up. Here's how to get started:</p>
+        <ul>
+          <li>Complete your profile</li>
+          <li>Explore our features</li>
+          <li>Join our community</li>
+        </ul>
+      </body>
+    </html>
+    """
+    
+    await send_email_simple(
+        to=user_email,
+        subject="Welcome to Aegis Stack!",
+        html=html
+    )
+```
+
+### Two-Factor Authentication
+
+```python
+from app.services.comms.sms import send_sms_simple
+import secrets
+
+async def send_2fa_code(phone_number: str) -> str:
+    """Send 2FA verification code via SMS."""
+    # Generate 6-digit code
+    code = secrets.randbelow(900000) + 100000
+    
+    await send_sms_simple(
+        to=phone_number,
+        body=f"Your verification code is {code}. Valid for 5 minutes."
+    )
+    
+    return str(code)
+```
+
+### Order Notification
+
+```python
+from app.services.comms.email import send_email
+from app.services.comms.sms import send_sms
+from app.services.comms.models import SendEmailRequest, SendSMSRequest
+
+async def notify_order_shipped(order_id: str, email: str, phone: str, tracking_url: str):
+    """Send multi-channel notification for shipped order."""
+    # Send email
+    email_request = SendEmailRequest(
+        to=[email],
+        subject=f"Order #{order_id} Shipped",
+        html=f"""
+        <h2>Your order has shipped!</h2>
+        <p>Track your package: <a href="{tracking_url}">Track Order</a></p>
+        """,
+        tags=["order", "shipping"]
+    )
+    await send_email(email_request)
+    
+    # Send SMS
+    sms_request = SendSMSRequest(
+        to=phone,
+        body=f"Order #{order_id} shipped! Track: {tracking_url}"
+    )
+    await send_sms(sms_request)
+```
+
+### Password Reset with Expiring Link
+
+```python
+from app.services.comms.email import send_email_simple
+from app.core.security import create_access_token
+from datetime import timedelta
+
+async def send_password_reset(user_email: str, user_id: int):
+    """Send password reset email with expiring token."""
+    # Generate reset token (expires in 1 hour)
+    reset_token = create_access_token(
+        data={"sub": user_email, "user_id": user_id, "type": "reset"},
+        expires_delta=timedelta(hours=1)
+    )
+    
+    reset_url = f"https://yourapp.com/reset-password?token={reset_token}"
+    
+    await send_email_simple(
+        to=user_email,
+        subject="Reset Your Password",
+        html=f"""
+        <p>Click the link below to reset your password:</p>
+        <p><a href="{reset_url}">Reset Password</a></p>
+        <p>This link expires in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+        """
+    )
+```
+
+### Bulk Email with Rate Limiting
+
+```python
+import asyncio
+from app.services.comms.email import send_email_simple
+
+async def send_newsletter(recipients: list[str], content: str):
+    """Send newsletter to multiple recipients with rate limiting."""
+    # Resend free tier: 100 emails/day
+    # Rate limit: 10 emails per second
+    
+    for i, recipient in enumerate(recipients):
+        try:
+            await send_email_simple(
+                to=recipient,
+                subject="Monthly Newsletter",
+                html=content
+            )
+            
+            # Rate limit: 100ms between emails (10/second)
+            if i < len(recipients) - 1:
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            print(f"Failed to send to {recipient}: {e}")
+            continue
+```
+
+### Voice Call with TwiML
+
+```python
+from app.services.comms.call import make_call
+from app.services.comms.models import MakeCallRequest
+
+async def make_reminder_call(phone_number: str, appointment_time: str):
+    """Make automated appointment reminder call."""
+    # Your server hosts the TwiML response
+    twiml_url = f"https://yourapp.com/twiml/reminder?time={appointment_time}"
+    
+    request = MakeCallRequest(
+        to=phone_number,
+        twiml_url=twiml_url,
+        timeout=30  # Wait 30 seconds for answer
+    )
+    
+    response = await make_call(request)
+    return response.sid
+
+# TwiML endpoint (FastAPI route)
+@router.get("/twiml/reminder")
+async def reminder_twiml(time: str):
+    """Generate TwiML for reminder call."""
+    twiml = f"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+        <Say voice="alice">
+            This is a reminder for your appointment at {time}.
+            Press 1 to confirm, or 2 to reschedule.
+        </Say>
+        <Gather numDigits="1" action="/twiml/reminder/response">
+            <Pause length="3"/>
+        </Gather>
+    </Response>
+    """
+    return Response(content=twiml, media_type="application/xml")
+```
+
+## Webhook Handlers
+
+Handle delivery status callbacks from providers:
+
+### Email Status Webhook (Resend)
+
+```python
+from app.services.comms.webhooks import handle_email_webhook
+
+@router.post("/webhooks/email")
+async def email_webhook(event: EmailWebhookEvent):
+    """Handle Resend webhook for email status updates."""
+    if event.type == "email.delivered":
+        # Email successfully delivered
+        await log_email_delivery(event.data["email_id"])
+    elif event.type == "email.bounced":
+        # Email bounced - mark email as invalid
+        await mark_email_bounced(event.data["recipient"])
+    
+    return {"status": "received"}
+```
+
+### SMS/Voice Status Webhook (Twilio)
+
+```python
+from app.services.comms.webhooks import handle_sms_webhook
+
+@router.post("/webhooks/sms")
+async def sms_webhook(event: SMSWebhookEvent):
+    """Handle Twilio webhook for SMS status updates."""
+    if event.message_status == "delivered":
+        await log_sms_delivery(event.message_sid)
+    elif event.message_status == "failed":
+        await log_sms_failure(
+            event.message_sid,
+            event.error_code,
+            event.error_message
+        )
+    
+    return {"status": "received"}
+```
+
+## Testing
+
+Test communications functionality:
+
+```python tests/test_comms.py
+import pytest
+from httpx import AsyncClient
+from unittest.mock import patch, AsyncMock
+
+@pytest.mark.asyncio
+async def test_send_email(client: AsyncClient):
+    """Test email sending endpoint."""
+    with patch("resend.Emails.send") as mock_send:
+        mock_send.return_value = {"id": "re_test123"}
+        
+        response = await client.post(
+            "/api/v1/comms/email/send",
+            json={
+                "to": ["test@example.com"],
+                "subject": "Test Email",
+                "html": "<p>Test content</p>"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "re_test123"
+        assert data["status"] == "sent"
+
+@pytest.mark.asyncio
+async def test_send_sms(client: AsyncClient):
+    """Test SMS sending endpoint."""
+    with patch("twilio.rest.Client.messages.create") as mock_create:
+        mock_message = AsyncMock()
+        mock_message.sid = "SM_test123"
+        mock_create.return_value = mock_message
+        
+        response = await client.post(
+            "/api/v1/comms/sms/send",
+            json={
+                "to": "+15551234567",
+                "body": "Test SMS"
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sid"] == "SM_test123"
+
+@pytest.mark.asyncio
+async def test_health_check(client: AsyncClient):
+    """Test communications health endpoint."""
+    response = await client.get("/api/v1/comms/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert "channels" in data
+    assert "email" in data["channels"]
+```
+
+## Error Handling
+
+The service includes comprehensive error handling:
+
+```python
+from app.services.comms.email import (
+    EmailError,
+    EmailConfigurationError,
+    send_email_simple
+)
+
+async def safe_send_email(recipient: str, content: str):
+    """Send email with error handling."""
+    try:
+        await send_email_simple(
+            to=recipient,
+            subject="Notification",
+            html=content
+        )
+        return True
+    except EmailConfigurationError as e:
+        # Missing API key or configuration
+        logger.error(f"Email not configured: {e}")
+        return False
+    except EmailError as e:
+        # Provider error (rate limit, invalid recipient, etc.)
+        logger.error(f"Failed to send email: {e}")
+        return False
+```
+
+## Dependencies
+
+The communications service requires:
+
+- `resend>=2.4.0` - Email provider SDK
+- `twilio>=9.3.7` - SMS/Voice provider SDK
+
+These are automatically added to your `pyproject.toml` when you add the service.
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Backend Component" icon="server" href="/components/backend">
+    Required for API endpoints
+  </Card>
+  
+  <Card title="Authentication Service" icon="shield-check" href="/services/authentication">
+    Send verification emails and password resets
+  </Card>
+  
+  <Card title="Worker Component" icon="gears" href="/components/worker">
+    Queue emails for async processing
+  </Card>
+  
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Manage services from the command line
+  </Card>
+</CardGroup>

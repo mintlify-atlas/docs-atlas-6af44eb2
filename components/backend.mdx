@@ -1,0 +1,414 @@
+---
+title: Backend
+description: FastAPI-based REST API server with automatic routing and middleware discovery
+icon: server
+---
+
+The Backend component provides a production-ready FastAPI server with automatic route discovery, middleware registration, and health check endpoints. It serves as the foundation for your application's REST API.
+
+## What It Does
+
+The Backend component is a core component that:
+
+- **FastAPI Server**: Production-ready async REST API with automatic OpenAPI documentation
+- **Auto-Discovery**: Automatically discovers and registers routes and middleware from your components
+- **Health Checks**: Built-in health monitoring and system introspection
+- **CORS Support**: Configurable cross-origin resource sharing
+- **Hot Reload**: Development mode with automatic reloading on code changes
+
+## When To Use
+
+The Backend is a **core component** that's automatically included in every Aegis Stack project. You cannot remove it.
+
+Use it to:
+- Build REST APIs for your application
+- Serve health check endpoints for monitoring
+- Integrate with other components (database, auth, AI, etc.)
+- Provide API endpoints for your frontend
+
+## Adding to Your Project
+
+The Backend component is automatically included in all projects:
+
+```bash
+aegis init my-api
+```
+
+It cannot be added or removed separately since it's a core component.
+
+## Configuration
+
+Configure the Backend through environment variables in your `.env` file:
+
+```bash
+# Server Configuration
+PORT=8000                    # Port for the web server
+AUTO_RELOAD=false            # Enable hot reload in development
+
+# CORS Configuration
+CORS_ORIGINS=*               # Allowed origins (comma-separated)
+CORS_ALLOW_CREDENTIALS=true
+CORS_ALLOW_METHODS=*
+CORS_ALLOW_HEADERS=*
+```
+
+### Environment Variables
+
+<ResponseField name="PORT" type="integer" default="8000">
+  Port number for the web server
+</ResponseField>
+
+<ResponseField name="AUTO_RELOAD" type="boolean" default="false">
+  Enable automatic reloading on code changes (development only)
+</ResponseField>
+
+<ResponseField name="CORS_ORIGINS" type="string" default="*">
+  Comma-separated list of allowed CORS origins
+</ResponseField>
+
+## Key Files Generated
+
+<CodeGroup>
+```python app/components/backend/main.py
+from app.components.backend.api.routing import include_routers
+from app.components.backend.hooks import backend_hooks
+from fastapi import FastAPI
+
+def create_backend_app(app: FastAPI) -> FastAPI:
+    """Configure FastAPI app with all backend concerns"""
+    # Auto-discover and register middleware
+    backend_hooks.discover_and_register_middleware(app)
+    
+    # Include all routes
+    include_routers(app)
+    
+    return app
+```
+
+```python app/entrypoints/webserver.py
+import uvicorn
+from app.core.config import settings
+from app.integrations.main import create_integrated_app
+
+def main() -> None:
+    """Main webserver entry point"""
+    app = create_integrated_app()
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=settings.PORT,
+    )
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+app/components/backend/
+├── __init__.py
+├── main.py                 # FastAPI app factory
+├── hooks.py                # Lifecycle hooks and middleware discovery
+├── api/
+│   ├── __init__.py
+│   ├── routing.py          # Route registration
+│   ├── health.py           # Health check endpoints
+│   └── [service-routers]/  # Service-specific routes (auth, ai, etc.)
+└── middleware/             # Custom middleware
+```
+
+## Usage Examples
+
+### Adding Custom Routes
+
+Create a new router in `app/components/backend/api/`:
+
+<Steps>
+  <Step title="Create a new router file">
+    ```python app/components/backend/api/my_routes.py
+    from fastapi import APIRouter
+    
+    router = APIRouter(prefix="/api", tags=["my-feature"])
+    
+    @router.get("/hello")
+    async def hello() -> dict[str, str]:
+        return {"message": "Hello, World!"}
+    ```
+  </Step>
+
+  <Step title="Register the router">
+    The router is automatically discovered and registered through the `include_routers` function.
+    
+    Alternatively, manually register it in `app/components/backend/api/routing.py`:
+    ```python
+    from app.components.backend.api.my_routes import router as my_router
+    
+    def include_routers(app: FastAPI) -> None:
+        app.include_router(my_router)
+    ```
+  </Step>
+
+  <Step title="Access your endpoint">
+    ```bash
+    curl http://localhost:8000/api/hello
+    ```
+  </Step>
+</Steps>
+
+### Adding Custom Middleware
+
+Create middleware in `app/components/backend/middleware/`:
+
+```python app/components/backend/middleware/timing.py
+import time
+from fastapi import Request
+from app.core.log import logger
+
+async def timing_middleware(request: Request, call_next):
+    """Log request timing information"""
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    
+    logger.info(
+        f"{request.method} {request.url.path} - {duration:.3f}s"
+    )
+    
+    return response
+```
+
+The middleware is automatically discovered and registered by the backend hooks system.
+
+### Health Check Endpoint
+
+The backend provides a comprehensive health check endpoint:
+
+```bash
+curl http://localhost:8000/health/
+```
+
+<CodeGroup>
+```json Response
+{
+  "status": "healthy",
+  "components": {
+    "aegis": {
+      "status": "healthy",
+      "sub_components": {
+        "backend": {
+          "status": "healthy",
+          "message": "FastAPI server is running",
+          "response_time_ms": 2.5
+        },
+        "database": {
+          "status": "healthy",
+          "message": "Database connection OK",
+          "response_time_ms": 5.2
+        }
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Docker Integration
+
+The Backend runs in Docker with health checks:
+
+```yaml docker-compose.yml
+services:
+  webserver:
+    build: .
+    command: python -m app.entrypoints.webserver
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - AUTO_RELOAD=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+## Development Workflow
+
+<Tabs>
+  <Tab title="Local Development">
+    Run with hot reload enabled:
+    
+    ```bash
+    # Set in .env
+    AUTO_RELOAD=true
+    
+    # Start server
+    uv run python -m app.entrypoints.webserver
+    ```
+    
+    The server will automatically reload when you modify Python files.
+  </Tab>
+
+  <Tab title="Docker Development">
+    Run in Docker with volume mounts:
+    
+    ```bash
+    make serve
+    ```
+    
+    This starts all services with the backend mounted for live code updates.
+  </Tab>
+
+  <Tab title="Testing">
+    Test your API endpoints:
+    
+    ```python tests/api/test_my_routes.py
+    import pytest
+    from httpx import AsyncClient
+    from app.integrations.main import create_integrated_app
+    
+    @pytest.mark.asyncio
+    async def test_hello_endpoint():
+        app = create_integrated_app()
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            response = await client.get("/api/hello")
+            assert response.status_code == 200
+            assert response.json() == {"message": "Hello, World!"}
+    ```
+  </Tab>
+</Tabs>
+
+## API Documentation
+
+FastAPI automatically generates OpenAPI documentation:
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+
+<Note>
+  The API documentation is automatically updated when you add new routes or modify existing ones.
+</Note>
+
+## Dependencies
+
+The Backend component requires:
+
+<CardGroup cols={2}>
+  <Card title="FastAPI" icon="bolt">
+    Modern async web framework
+    ```
+    fastapi==0.116.1
+    ```
+  </Card>
+  
+  <Card title="Uvicorn" icon="rocket">
+    ASGI server for FastAPI
+    ```
+    uvicorn==0.35.0
+    ```
+  </Card>
+</CardGroup>
+
+## Monitoring
+
+The Backend integrates with Overseer for real-time monitoring:
+
+- **Health Status**: View backend health in the Overseer dashboard
+- **Request Metrics**: Monitor request counts and response times
+- **Error Tracking**: See failed requests and errors
+- **API Documentation**: Quick links to Swagger UI
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Frontend" icon="desktop" href="/components/frontend">
+    Flet-based UI that integrates with the backend
+  </Card>
+  
+  <Card title="Database" icon="database" href="/components/database">
+    Add persistent storage to your API
+  </Card>
+  
+  <Card title="Worker" icon="gears" href="/components/worker">
+    Offload background tasks from API requests
+  </Card>
+  
+  <Card title="Ingress" icon="network-wired" href="/components/ingress">
+    Add reverse proxy and load balancing
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Dependency Injection
+
+Use FastAPI's dependency injection for shared resources:
+
+```python
+from fastapi import Depends
+from app.core.db import get_async_session
+
+@router.get("/users")
+async def list_users(session = Depends(get_async_session)):
+    # Use session to query database
+    pass
+```
+
+### Background Tasks
+
+For lightweight tasks, use FastAPI background tasks:
+
+```python
+from fastapi import BackgroundTasks
+
+@router.post("/send-email")
+async def send_email(background_tasks: BackgroundTasks):
+    background_tasks.add_task(send_email_task)
+    return {"message": "Email queued"}
+```
+
+<Warning>
+  For heavy or long-running tasks, use the [Worker component](/components/worker) instead.
+</Warning>
+
+### Error Handling
+
+Handle errors consistently:
+
+```python
+from fastapi import HTTPException
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: int):
+    user = await fetch_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port already in use">
+    If port 8000 is already taken, change the `PORT` in your `.env` file:
+    ```bash
+    PORT=8001
+    ```
+  </Accordion>
+
+  <Accordion title="CORS errors">
+    Update `CORS_ORIGINS` to allow your frontend domain:
+    ```bash
+    CORS_ORIGINS=http://localhost:3000,https://myapp.com
+    ```
+  </Accordion>
+
+  <Accordion title="Routes not found">
+    Ensure your router is registered in `app/components/backend/api/routing.py`.
+  </Accordion>
+
+  <Accordion title="Hot reload not working">
+    Make sure `AUTO_RELOAD=true` is set in your `.env` file and you're running outside Docker.
+  </Accordion>
+</AccordionGroup>

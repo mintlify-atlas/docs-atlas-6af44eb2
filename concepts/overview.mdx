@@ -1,0 +1,247 @@
+---
+title: 'Architecture Overview'
+description: 'Understand the Aegis Stack architecture: CLI, templates, components, and services'
+---
+
+## What is Aegis Stack?
+
+Aegis Stack is a **CLI tool** for scaffolding modular Python applications using [Copier](https://copier.readthedocs.io/) templates. It generates production-ready FastAPI backends with optional infrastructure components and business logic services that you can add or remove over time.
+
+<CardGroup cols={2}>
+  <Card title="CLI Tool" icon="terminal">
+    Command-line interface for creating, evolving, and managing projects
+  </Card>
+  <Card title="Copier Templates" icon="copy">
+    Git-aware templates that enable adding/removing components after initialization
+  </Card>
+  <Card title="Modular Components" icon="cubes">
+    Infrastructure pieces (database, workers, scheduler) that can be mixed and matched
+  </Card>
+  <Card title="Business Services" icon="briefcase">
+    Higher-level services (auth, AI, communications) that build on components
+  </Card>
+</CardGroup>
+
+## Architecture Layers
+
+Aegis Stack projects are organized into three architectural layers:
+
+### 1. Core (Always Included)
+
+Every project includes these foundational components:
+
+- **Backend** (`aegis/core/components.py:63-69`) - FastAPI + Uvicorn server
+- **Frontend** (`aegis/core/components.py:70-76`) - Flet UI interface
+
+These cannot be removed as they form the base of every Aegis Stack application.
+
+### 2. Infrastructure Components
+
+Optional building blocks that provide technical capabilities:
+
+```python
+ComponentType.INFRASTRUCTURE  # From aegis/core/components.py:16
+```
+
+Examples: Redis, Workers, Scheduler, Database, Ingress, Observability
+
+Components are **infrastructure-focused** and provide the foundation for services to build upon.
+
+### 3. Business Logic Services
+
+Higher-level features that deliver business value:
+
+```python
+ServiceType  # From aegis/core/services.py:12-21
+```
+
+Examples: Authentication (AUTH), AI integration (AI), Communications (NOTIFICATION)
+
+Services often **require specific components** to function. For example, the auth service requires both backend and database components.
+
+## How It Works
+
+### Template Generation
+
+When you run `aegis init`, the CLI:
+
+1. Prompts for project metadata and component selection
+2. Uses Copier to render the template from `aegis/templates/copier-aegis-project/`
+3. Generates a complete project structure with selected components
+4. Creates a `.copier-answers.yml` file tracking your choices
+
+<Note>
+The `.copier-answers.yml` file is critical - it enables the `add`, `remove`, and `update` commands to work correctly.
+</Note>
+
+### Component & Service System
+
+<Accordion title="Component Specification (ComponentSpec)">
+Each component is defined by a `ComponentSpec` in `aegis/core/components.py:31-59`:
+
+```python
+@dataclass
+class ComponentSpec:
+    name: str
+    type: ComponentType
+    description: str
+    requires: list[str] | None = None        # Hard dependencies
+    recommends: list[str] | None = None      # Soft dependencies
+    conflicts: list[str] | None = None       # Mutual exclusions
+    docker_services: list[str] | None = None
+    pyproject_deps: list[str] | None = None
+    template_files: list[str] | None = None
+```
+
+This specification drives:
+- Dependency resolution during `aegis add`
+- File inclusion/exclusion during template rendering
+- Docker Compose service configuration
+- Python package installation via `pyproject.toml`
+</Accordion>
+
+<Accordion title="Service Specification (ServiceSpec)">
+Services are defined in `aegis/core/services.py:24-44`:
+
+```python
+@dataclass
+class ServiceSpec:
+    name: str
+    type: ServiceType
+    description: str
+    required_components: list[str]    # Components this service needs
+    recommended_components: list[str]
+    required_services: list[str]      # Other services this depends on
+    conflicts: list[str]
+    pyproject_deps: list[str]
+    template_files: list[str]
+```
+
+Services add business logic on top of infrastructure components.
+</Accordion>
+
+### Dependency Resolution
+
+The `DependencyResolver` (`aegis/core/dependency_resolver.py`) automatically handles component dependencies:
+
+```bash
+# You request worker
+aegis add worker
+
+# Aegis automatically includes redis (required dependency)
+Auto-added dependencies: redis
+```
+
+From `aegis/core/components.py:84-92`:
+
+```python
+"worker": ComponentSpec(
+    name="worker",
+    type=ComponentType.INFRASTRUCTURE,
+    description="Background task processing infrastructure with arq",
+    requires=["redis"],  # Hard dependency
+    # ...
+)
+```
+
+## Configuration Management
+
+Aegis Stack uses Copier's answer file system to track project configuration:
+
+### Answer Keys (`copier.yml:73-226`)
+
+```yaml
+include_scheduler: bool
+include_worker: bool
+include_database: bool
+scheduler_backend: "memory" | "sqlite" | "postgres"
+include_auth: bool
+include_ai: bool
+ai_framework: "pydantic-ai" | "langchain"
+```
+
+These answers are stored in `.copier-answers.yml` and used by:
+- `aegis add` - Updates answers when adding components
+- `aegis remove` - Updates answers when removing components
+- `aegis update` - Preserves answers while updating template version
+
+## File Structure
+
+A typical Aegis Stack project structure:
+
+```
+my-project/
+├── .copier-answers.yml          # Tracks component selections
+├── app/
+│   ├── components/              # Component implementations
+│   │   ├── backend/            # FastAPI routes, middleware
+│   │   ├── frontend/           # Flet UI pages
+│   │   ├── worker/             # Background task workers (if enabled)
+│   │   └── scheduler.py        # Scheduled jobs (if enabled)
+│   ├── services/               # Business logic services
+│   │   ├── auth/              # JWT authentication (if enabled)
+│   │   ├── ai/                # AI chatbot service (if enabled)
+│   │   └── comms/             # Email/SMS service (if enabled)
+│   ├── core/                   # Core utilities
+│   │   ├── db.py              # Database setup (if enabled)
+│   │   └── security.py        # Security utilities (if auth enabled)
+│   └── models/                 # Data models
+├── docker-compose.yml          # Generated based on selected components
+├── pyproject.toml              # Dependencies based on components/services
+└── Makefile                    # Common development commands
+```
+
+<Info>
+**Template Files**: Each component/service specifies which files it adds via the `template_files` field in its specification.
+</Info>
+
+## Key Design Principles
+
+### 1. Template-Driven Generation
+
+All code is generated from Jinja2 templates in `aegis/templates/copier-aegis-project/`. This ensures:
+- Consistency across all projects
+- Easy updates via `aegis update`
+- No runtime dependencies on Aegis Stack itself
+
+### 2. Git-Aware Updates
+
+Copier's git integration enables:
+- Safe merging of template updates into your customized project
+- Conflict detection and `.rej` file generation
+- Rollback capabilities via git tags
+
+### 3. No Vendor Lock-In
+
+Once generated, your project is **yours**:
+- No runtime dependency on Aegis Stack
+- Uses standard Python tools (FastAPI, SQLModel, etc.)
+- Can be maintained without the CLI if needed
+
+### 4. Modular by Default
+
+Components and services are designed to be:
+- **Independent** - Add only what you need
+- **Composable** - Mix and match as requirements change
+- **Evolvable** - Add/remove at any time
+
+<Tip>
+Read the [Evolution](/concepts/evolution) guide to learn how to add and remove components over time.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="cube" href="/concepts/components">
+    Learn about available infrastructure components
+  </Card>
+  <Card title="Services" icon="briefcase" href="/concepts/services">
+    Explore business logic services
+  </Card>
+  <Card title="Evolution" icon="rotate" href="/concepts/evolution">
+    Understand how to evolve your stack over time
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Complete command reference
+  </Card>
+</CardGroup>

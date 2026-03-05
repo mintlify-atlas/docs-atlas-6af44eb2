@@ -1,0 +1,540 @@
+---
+title: Authentication Service
+description: JWT-based authentication with user management, secure password hashing, and OAuth2-compatible endpoints
+icon: shield-check
+---
+
+The Authentication service provides production-ready user authentication using JWT tokens, bcrypt password hashing, and FastAPI's OAuth2 security primitives.
+
+## Overview
+
+The authentication service includes:
+
+- **JWT token generation and validation** with configurable expiration
+- **Secure password hashing** using bcrypt with automatic truncation
+- **User management** with create, read, update, and delete operations
+- **Account activation/deactivation** for user lifecycle management
+- **OAuth2-compatible endpoints** for standard authentication flows
+
+<Note>
+The auth service requires the **backend** and **database** components. These dependencies are automatically included when you add the service.
+</Note>
+
+## Adding Authentication to Your Project
+
+Add the authentication service to a new or existing project:
+
+<CodeGroup>
+```bash New Project
+aegis init my-app --services auth
+cd my-app
+```
+
+```bash Existing Project
+aegis add-service auth --project-path ./my-app
+```
+</CodeGroup>
+
+The service includes:
+
+- User models (`app/models/user.py`)
+- Authentication service logic (`app/services/auth/`)
+- Security utilities (`app/core/security.py`)
+- API routes (`app/components/backend/api/auth/router.py`)
+- Database migrations for the User table
+
+## Configuration
+
+Configure authentication settings in your `.env` file:
+
+```bash .env
+# Secret key for JWT signing (generate with: openssl rand -hex 32)
+SECRET_KEY=your-super-secret-key-change-this-in-production
+
+# JWT algorithm
+JWT_ALGORITHM=HS256
+
+# Token expiration in minutes
+ACCESS_TOKEN_EXPIRE_MINUTES=43200  # 30 days
+```
+
+<Warning>
+**Never commit your SECRET_KEY to version control.** Generate a secure key for each environment:
+
+```bash
+openssl rand -hex 32
+```
+</Warning>
+
+## User Model
+
+The service provides a complete SQLModel user schema:
+
+```python app/models/user.py
+class User(UserBase, table=True):
+    """User database model."""
+    
+    id: int | None = Field(default=None, primary_key=True)
+    email: EmailStr = Field(unique=True, index=True)
+    full_name: str | None = None
+    hashed_password: str
+    is_active: bool = Field(default=True)
+    created_at: datetime
+    updated_at: datetime | None = None
+```
+
+### Request/Response Models
+
+<ParamField path="UserCreate" type="object">
+  Request model for user registration
+  
+  - `email`: EmailStr (validated email address)
+  - `password`: str (min 8 characters)
+  - `full_name`: str | None
+  - `is_active`: bool (default: True)
+</ParamField>
+
+<ParamField path="UserResponse" type="object">
+  Response model (excludes sensitive data)
+  
+  - `id`: int
+  - `email`: EmailStr
+  - `full_name`: str | None
+  - `is_active`: bool
+  - `created_at`: datetime
+  - `updated_at`: datetime | None
+</ParamField>
+
+## API Endpoints
+
+The authentication service exposes the following endpoints:
+
+### Registration
+
+```http
+POST /api/v1/auth/register
+```
+
+Create a new user account.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepass123",
+    "full_name": "John Doe"
+  }'
+```
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/auth/register",
+        json={
+            "email": "user@example.com",
+            "password": "securepass123",
+            "full_name": "John Doe"
+        }
+    )
+    user = response.json()
+```
+</CodeGroup>
+
+### Login
+
+```http
+POST /api/v1/auth/token
+```
+
+Authenticate and receive a JWT access token.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/auth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=user@example.com&password=securepass123"
+```
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/auth/token",
+        data={
+            "username": "user@example.com",
+            "password": "securepass123"
+        }
+    )
+    token_data = response.json()
+    access_token = token_data["access_token"]
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+### Get Current User
+
+```http
+GET /api/v1/auth/me
+```
+
+Retrieve the authenticated user's profile.
+
+```bash
+curl -X GET http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### User Management
+
+<CardGroup cols={2}>
+  <Card title="List Users" icon="users">
+    ```http
+    GET /api/v1/auth/users
+    ```
+    Retrieve all users in the system.
+  </Card>
+  
+  <Card title="Get User" icon="user">
+    ```http
+    GET /api/v1/auth/users/{user_id}
+    ```
+    Get a specific user by ID.
+  </Card>
+  
+  <Card title="Update User" icon="pen-to-square">
+    ```http
+    PATCH /api/v1/auth/users/{user_id}
+    ```
+    Update user profile information.
+  </Card>
+  
+  <Card title="Delete User" icon="trash">
+    ```http
+    DELETE /api/v1/auth/users/{user_id}
+    ```
+    Permanently delete a user account.
+  </Card>
+</CardGroup>
+
+### Account Status
+
+<CardGroup cols={2}>
+  <Card title="Deactivate User" icon="user-slash">
+    ```http
+    PATCH /api/v1/auth/users/{user_id}/deactivate
+    ```
+  </Card>
+  
+  <Card title="Activate User" icon="user-check">
+    ```http
+    PATCH /api/v1/auth/users/{user_id}/activate
+    ```
+  </Card>
+</CardGroup>
+
+## Usage Examples
+
+### Protected Routes
+
+Use the authentication service to protect your API endpoints:
+
+```python app/components/backend/api/your_router.py
+from fastapi import APIRouter, Depends
+from app.services.auth.auth_service import get_current_user_from_token
+from app.models.user import User
+from fastapi.security import OAuth2PasswordBearer
+
+router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+@router.get("/protected")
+async def protected_route(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_async_db)
+):
+    user = await get_current_user_from_token(token, db)
+    return {"message": f"Hello {user.email}"}
+```
+
+### User Service in Business Logic
+
+Access user management functions from your services:
+
+```python
+from app.services.auth.user_service import UserService
+from app.models.user import UserCreate
+
+async def create_demo_user(db: AsyncSession):
+    """Create a demo user account."""
+    user_service = UserService(db)
+    
+    user_data = UserCreate(
+        email="demo@example.com",
+        password="demopass123",
+        full_name="Demo User"
+    )
+    
+    user = await user_service.create_user(user_data)
+    return user
+```
+
+### Custom Token Claims
+
+Extend JWT tokens with custom claims:
+
+```python
+from app.core.security import create_access_token
+from datetime import timedelta
+
+# Create token with custom claims
+access_token = create_access_token(
+    data={
+        "sub": user.email,
+        "user_id": user.id,
+        "roles": ["admin", "user"]
+    },
+    expires_delta=timedelta(hours=24)
+)
+```
+
+## Security Features
+
+<Steps>
+  <Step title="Password Hashing">
+    Passwords are hashed using bcrypt with automatic salt generation. The service includes automatic truncation to 72 bytes for bcrypt compatibility.
+    
+    ```python app/core/security.py
+    def get_password_hash(password: str) -> str:
+        """Hash a password using bcrypt."""
+        truncated = password[:72]  # bcrypt limit
+        return bcrypt.hashpw(
+            truncated.encode("utf-8"), 
+            bcrypt.gensalt()
+        ).decode("utf-8")
+    ```
+  </Step>
+  
+  <Step title="JWT Token Validation">
+    Tokens are validated on every protected request, checking signature and expiration.
+    
+    ```python
+    def verify_token(token: str) -> dict[str, Any] | None:
+        """Verify and decode a JWT token."""
+        try:
+            payload = jwt.decode(
+                token, 
+                settings.SECRET_KEY, 
+                algorithms=[settings.JWT_ALGORITHM]
+            )
+            return payload
+        except JWTError:
+            return None
+    ```
+  </Step>
+  
+  <Step title="Account Status Checks">
+    Inactive users are automatically rejected during authentication, even with valid tokens.
+    
+    ```python
+    if not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Inactive user"
+        )
+    ```
+  </Step>
+</Steps>
+
+## Integration Patterns
+
+### Role-Based Access Control (RBAC)
+
+Extend the User model to support roles:
+
+```python
+# Add to app/models/user.py
+from enum import Enum
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    USER = "user"
+    GUEST = "guest"
+
+class User(UserBase, table=True):
+    # ... existing fields ...
+    role: UserRole = Field(default=UserRole.USER)
+
+# Create role dependency
+def require_role(required_role: UserRole):
+    async def role_checker(
+        token: str = Depends(oauth2_scheme),
+        db: AsyncSession = Depends(get_async_db)
+    ):
+        user = await get_current_user_from_token(token, db)
+        if user.role != required_role:
+            raise HTTPException(403, "Insufficient permissions")
+        return user
+    return role_checker
+
+# Use in routes
+@router.delete("/admin/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    admin: User = Depends(require_role(UserRole.ADMIN))
+):
+    # Only admins can delete users
+    pass
+```
+
+### Email Verification
+
+Combine with the communications service for email verification:
+
+```python
+from app.services.comms.email import send_email_simple
+import secrets
+
+async def send_verification_email(user: User):
+    """Send email verification link."""
+    # Generate verification token
+    token = secrets.token_urlsafe(32)
+    
+    # Store token (implement your storage logic)
+    await store_verification_token(user.id, token)
+    
+    # Send email
+    verification_url = f"https://yourapp.com/verify?token={token}"
+    await send_email_simple(
+        to=user.email,
+        subject="Verify your email",
+        html=f"Click here to verify: <a href='{verification_url}'>Verify</a>"
+    )
+```
+
+### Multi-Factor Authentication (MFA)
+
+Add TOTP-based two-factor authentication:
+
+```python
+import pyotp
+
+# Generate MFA secret during registration
+def generate_mfa_secret() -> str:
+    return pyotp.random_base32()
+
+# Verify MFA code during login
+def verify_mfa_code(secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code, valid_window=1)
+```
+
+## Database Migrations
+
+The auth service includes automatic migrations for the User table. Run migrations after adding the service:
+
+```bash
+# Generate migration (if schema changes)
+alembic revision --autogenerate -m "Add user table"
+
+# Apply migrations
+alembic upgrade head
+```
+
+## Testing
+
+Test authentication flows in your application:
+
+```python tests/test_auth.py
+import pytest
+from httpx import AsyncClient
+
+@pytest.mark.asyncio
+async def test_user_registration(client: AsyncClient):
+    """Test user registration endpoint."""
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "testpass123",
+            "full_name": "Test User"
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "test@example.com"
+    assert "id" in data
+
+@pytest.mark.asyncio
+async def test_login_flow(client: AsyncClient):
+    """Test complete login flow."""
+    # Register user
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "login@example.com",
+            "password": "loginpass123"
+        }
+    )
+    
+    # Login
+    response = await client.post(
+        "/api/v1/auth/token",
+        data={
+            "username": "login@example.com",
+            "password": "loginpass123"
+        }
+    )
+    assert response.status_code == 200
+    token_data = response.json()
+    assert "access_token" in token_data
+    
+    # Access protected route
+    token = token_data["access_token"]
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+```
+
+## Dependencies
+
+The authentication service requires these Python packages:
+
+- `python-jose[cryptography]==3.3.0` - JWT token handling
+- `passlib[bcrypt]==1.7.4` - Password hashing
+- `python-multipart==0.0.9` - Form data parsing for OAuth2
+
+These are automatically added to your `pyproject.toml` when you add the service.
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Database Component" icon="database" href="/components/database">
+    Required for user persistence
+  </Card>
+  
+  <Card title="Backend Component" icon="server" href="/components/backend">
+    FastAPI backend for API endpoints
+  </Card>
+  
+  <Card title="Communications Service" icon="envelope" href="/services/communications">
+    Send verification emails and notifications
+  </Card>
+  
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Manage services from the command line
+  </Card>
+</CardGroup>

@@ -1,0 +1,407 @@
+---
+title: Removing Components
+description: How to remove components from your Aegis Stack project
+icon: trash
+---
+
+As your application evolves, you may find that certain components are no longer needed. The `aegis remove` command safely removes component files and cleans up configuration.
+
+<Warning>
+  Removing components **deletes files** from your project. This operation cannot be easily undone. Always commit your changes to git before removing components.
+</Warning>
+
+## Overview
+
+The `remove` command:
+- Deletes component-specific files
+- Updates `.copier-answers.yml` configuration
+- Cleans up Docker Compose services
+- Removes dependencies from `pyproject.toml`
+- Preserves core components (backend, frontend)
+
+## Basic Usage
+
+<Steps>
+  <Step title="Ensure Git is Clean">
+    **Critical**: Commit all changes before removing components so you can rollback if needed.
+
+    ```bash
+    git add .
+    git commit -m "Before removing scheduler component"
+    ```
+  </Step>
+
+  <Step title="Remove the Component">
+    ```bash
+    aegis remove scheduler
+    ```
+
+    You'll see a confirmation prompt:
+    ```
+    Components to remove:
+       • scheduler: Scheduled task execution infrastructure
+
+    WARNING: This will DELETE component files from your project!
+       Make sure you have committed your changes to git.
+
+    Remove these components? [y/N]:
+    ```
+  </Step>
+
+  <Step title="Review Deleted Files">
+    ```bash
+    git status
+    git diff
+    ```
+
+    Check which files were removed.
+  </Step>
+
+  <Step title="Clean Up Dependencies">
+    ```bash
+    uv sync
+    ```
+
+    Remove unused packages from your environment.
+  </Step>
+
+  <Step title="Test and Commit">
+    ```bash
+    make check
+    git add .
+    git commit -m "Remove scheduler component"
+    ```
+  </Step>
+</Steps>
+
+## Removing Multiple Components
+
+Remove multiple components at once:
+
+```bash
+aegis remove worker,scheduler,redis
+```
+
+## Interactive Mode
+
+Use interactive mode for guided removal:
+
+```bash
+aegis remove --interactive
+```
+
+This shows you:
+- Which components are currently enabled
+- Descriptions of each component
+- Confirmation before removal
+
+## What Gets Removed
+
+When you remove a component, Aegis Stack:
+
+### 1. Deletes Component Files
+
+<CodeGroup>
+```bash Scheduler Removal
+# Files deleted:
+app/components/scheduler.py
+app/entrypoints/scheduler.py
+```
+
+```bash Worker Removal
+# Directory deleted:
+app/components/worker/
+  ├── __init__.py
+  ├── arq_worker.py
+  ├── settings.py
+  └── functions/
+```
+
+```bash Database Removal
+# Files deleted:
+app/core/db.py
+app/components/backend/startup/database_init.py
+alembic/  # Migration directory
+```
+</CodeGroup>
+
+### 2. Updates Configuration
+
+Removes component flags from `.copier-answers.yml`:
+
+```yaml .copier-answers.yml
+# Before
+include_scheduler: true
+
+# After removal
+include_scheduler: false
+```
+
+### 3. Updates Docker Compose
+
+Removes service definitions from `docker-compose.yml`:
+
+```yaml
+# Scheduler service removed
+# services:
+#   scheduler:
+#     build: .
+#     command: python app/entrypoints/scheduler.py
+```
+
+### 4. Updates Dependencies
+
+Removes packages from `pyproject.toml`:
+
+```toml
+# apscheduler removed from dependencies
+# arq removed when worker is removed
+# redis removed when worker is removed (if no other component uses it)
+```
+
+## Dependency Handling
+
+Aegis Stack automatically handles component dependencies when removing:
+
+### Auto-Removal: Redis
+
+If you remove `worker` and nothing else uses `redis`:
+
+```bash
+aegis remove worker
+# Output:
+# Auto-removing redis (no standalone functionality, only used by worker)
+```
+
+Redis has no standalone value and is automatically cleaned up.
+
+<Note>
+  If a future cache component uses Redis, it will only be auto-removed when both worker and cache are removed.
+</Note>
+
+### Scheduler Persistence Warning
+
+If you remove a scheduler using SQLite persistence:
+
+```bash
+aegis remove scheduler
+```
+
+```
+IMPORTANT: Scheduler Persistence Warning
+   Your scheduler uses SQLite for job persistence.
+   The database file at data/scheduler.db will remain.
+
+   To keep your job history: Leave the database component
+   To remove all data: Also remove the database component
+```
+
+The database file `data/scheduler.db` is **not automatically deleted** to prevent data loss.
+
+## Core Component Protection
+
+Core components cannot be removed:
+
+```bash
+aegis remove backend
+# Output: Cannot remove core component: backend
+```
+
+Core components:
+- `backend` - FastAPI server
+- `frontend` - Flet UI
+
+These are essential to every Aegis Stack project.
+
+## Command Options
+
+### Project Path
+
+Remove components from a project in a different directory:
+
+```bash
+aegis remove scheduler --project-path ../my-api
+```
+
+### Skip Confirmation
+
+Auto-confirm the removal (use with caution):
+
+```bash
+aegis remove scheduler --yes
+```
+
+<Warning>
+  Using `--yes` skips the safety prompt. Only use this in scripts where you're certain about the removal.
+</Warning>
+
+### Force Version Mismatch
+
+Proceed even if CLI and project versions don't match:
+
+```bash
+aegis remove scheduler --force
+```
+
+### Verbose Output
+
+See detailed file operations:
+
+```bash
+aegis --verbose remove worker
+```
+
+## Real-World Examples
+
+### Remove Unused Scheduler
+
+```bash
+# Month 6: Moved to external cron jobs
+aegis remove scheduler
+
+# Deleted 2 files
+# - app/components/scheduler.py
+# - app/entrypoints/scheduler.py
+```
+
+### Clean Up Failed Experiment
+
+```bash
+# Tried AI service, not ready yet
+aegis remove ai
+
+# Clean removal of:
+# - app/services/ai/
+# - Related dependencies
+```
+
+### Simplify Development
+
+```bash
+# Remove ingress for local development
+aegis remove ingress
+
+# Faster startup, direct port access
+```
+
+## Rollback After Removal
+
+If you removed a component by mistake:
+
+```bash
+# Undo with git
+git reset --hard HEAD~1
+
+# Or restore specific files
+git checkout HEAD~1 -- app/components/scheduler.py
+```
+
+<Tip>
+  This is why committing before removal is critical!
+</Tip>
+
+## Re-adding Components
+
+You can always add a component back later:
+
+```bash
+# Removed scheduler
+aegis remove scheduler
+
+# Changed mind, add it back
+aegis add scheduler
+```
+
+The component will be regenerated from the template.
+
+<Warning>
+  Any customizations you made to the component files will be lost. If you customized the component, consider keeping it or manually backing up your changes.
+</Warning>
+
+## Not Enabled Components
+
+If you try to remove a component that's not enabled:
+
+```bash
+aegis remove observability
+# Output: Not enabled: observability
+# Output: No components to remove!
+```
+
+Aegis Stack detects this and exits safely.
+
+## Version Compatibility
+
+Before removing components, Aegis checks version compatibility:
+
+```bash
+aegis remove worker
+# Version Information:
+#    Current CLI:      0.3.0
+#    Current Template: 0.3.0
+```
+
+Version mismatches may cause issues. Use `--force` to proceed anyway, or update first.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Commit First" icon="code-commit">
+    Create a git commit before removing components so you can easily rollback.
+  </Card>
+  
+  <Card title="Review Dependencies" icon="diagram-project">
+    Check what other components depend on the one you're removing.
+  </Card>
+  
+  <Card title="Backup Customizations" icon="floppy-disk">
+    If you customized component files, back them up before removal.
+  </Card>
+  
+  <Card title="Test After Removal" icon="flask">
+    Run `make check` to ensure your project still works.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Conflict During Removal
+
+If files were manually modified:
+
+```bash
+# Check what changed
+git status
+git diff
+
+# If removal is incomplete, manually delete remaining files
+rm -rf app/components/scheduler.py
+```
+
+### Dependencies Not Removed
+
+Manually clean up `pyproject.toml`:
+
+```bash
+# After removing scheduler
+# Manually remove from pyproject.toml:
+# "apscheduler==3.10.4"
+
+uv sync  # Update lockfile
+```
+
+## Next Steps
+
+After removing components:
+
+1. **Test Locally**: `make serve` to ensure the app still works
+2. **Run Tests**: `make check` to catch any issues
+3. **Clean Dependencies**: `uv sync` to remove unused packages
+4. **Update Documentation**: If you documented the component, update your docs
+5. **Deploy**: Deploy the simplified stack
+
+<Card title="Related" icon="book">
+  - [Adding Components](/guides/adding-components)
+  - [Updating Stack](/guides/updating-stack)
+  - [Components Reference](/concepts/components)
+</Card>

@@ -1,0 +1,339 @@
+---
+title: Adding Components
+description: How to add new components to your Aegis Stack project
+icon: plus
+---
+
+Aegis Stack lets you add infrastructure components to your project at any time. Use the `aegis add` command to extend your application with new capabilities as your requirements grow.
+
+## Overview
+
+The `add` command uses Copier's update mechanism to safely merge new component files into your existing project while preserving your customizations.
+
+<Note>
+  The `aegis add` command only works with projects generated using Copier (default since v0.2.0).
+</Note>
+
+## Basic Usage
+
+<Steps>
+  <Step title="Ensure Git is Clean">
+    The add command requires a clean git working tree to safely track changes.
+
+    ```bash
+    git status
+    git add .
+    git commit -m "Prepare for component addition"
+    ```
+  </Step>
+
+  <Step title="Add a Single Component">
+    ```bash
+    aegis add scheduler
+    ```
+
+    This will:
+    - Validate the component exists
+    - Check for dependencies (auto-added if needed)
+    - Add component files to your project
+    - Update `.copier-answers.yml` configuration
+  </Step>
+
+  <Step title="Review Changes">
+    ```bash
+    git diff
+    ```
+
+    Review the added files and configuration changes before committing.
+  </Step>
+
+  <Step title="Test and Commit">
+    ```bash
+    make check
+    git add .
+    git commit -m "Add scheduler component"
+    ```
+  </Step>
+</Steps>
+
+## Adding Multiple Components
+
+You can add multiple components at once using a comma-separated list:
+
+```bash
+aegis add worker,scheduler,database
+```
+
+<Tip>
+  Dependencies are automatically resolved. Adding `worker` will automatically add `redis` if it's not already present.
+</Tip>
+
+## Interactive Mode
+
+For a guided selection experience, use interactive mode:
+
+```bash
+aegis add --interactive
+```
+
+This will:
+- Show you which components are already enabled
+- Let you select from available components
+- Display descriptions for each component
+- Handle backend selection (e.g., scheduler persistence)
+
+## Component Options
+
+### Scheduler Backend
+
+The scheduler component supports different persistence backends:
+
+#### Memory Backend (Default)
+```bash
+aegis add scheduler
+```
+
+Jobs are stored in memory. Simple, but jobs are lost on restart.
+
+#### SQLite Backend
+```bash
+aegis add scheduler --backend sqlite
+```
+
+Or using bracket syntax:
+```bash
+aegis add scheduler[sqlite]
+```
+
+Jobs persist to a SQLite database. Requires the `database` component (auto-added if missing).
+
+<Note>
+  PostgreSQL support for scheduler persistence is coming in a future release.
+</Note>
+
+## What Gets Created
+
+When you add a component, Aegis Stack:
+
+### 1. Adds Component Files
+
+<Accordion title="Scheduler Component Files">
+  ```
+  app/components/scheduler.py
+  app/entrypoints/scheduler.py
+  ```
+
+  **scheduler.py**: Core scheduler configuration and job registry
+
+  **scheduler.py entrypoint**: Container entrypoint for running the scheduler
+</Accordion>
+
+<Accordion title="Worker Component Files">
+  ```
+  app/components/worker/
+  ├── __init__.py
+  ├── arq_worker.py
+  ├── settings.py
+  └── functions/
+      └── example.py
+  ```
+
+  Complete worker infrastructure with example background tasks.
+</Accordion>
+
+<Accordion title="Database Component Files">
+  ```
+  app/core/db.py
+  app/components/backend/startup/database_init.py
+  alembic/
+  ```
+
+  Database connection, ORM setup, and migration framework.
+</Accordion>
+
+### 2. Updates Docker Compose
+
+New services are added to `docker-compose.yml`:
+
+```yaml docker-compose.yml
+services:
+  scheduler:
+    build: .
+    command: python app/entrypoints/scheduler.py
+    volumes:
+      - ./app:/app/app
+    env_file: .env
+```
+
+### 3. Updates Dependencies
+
+New packages are added to `pyproject.toml`:
+
+```toml pyproject.toml
+dependencies = [
+    # ... existing deps
+    "apscheduler==3.10.4",  # for scheduler
+    "arq==0.25.0",          # for worker
+    "redis==5.0.8",         # for redis
+]
+```
+
+Run `uv sync` to install new dependencies.
+
+### 4. Updates Configuration
+
+New settings are added to `app/core/config.py`:
+
+```python app/core/config.py
+class Settings(BaseSettings):
+    # ... existing settings
+    
+    # Scheduler settings
+    SCHEDULER_TIMEZONE: str = "UTC"
+    SCHEDULER_BACKEND: str = "memory"  # or "sqlite"
+```
+
+## Dependency Resolution
+
+Aegis Stack automatically handles component dependencies:
+
+<CardGroup cols={2}>
+  <Card title="Worker" icon="gear">
+    **Requires**: redis
+    
+    Adding worker automatically adds redis if not present.
+  </Card>
+  
+  <Card title="Scheduler (SQLite)" icon="clock">
+    **Requires**: database
+    
+    Using `--backend sqlite` automatically adds database component.
+  </Card>
+</CardGroup>
+
+## Command Options
+
+### Project Path
+
+Add components to a project in a different directory:
+
+```bash
+aegis add scheduler --project-path ../my-api
+```
+
+### Skip Confirmation
+
+Auto-confirm the operation (useful for scripts):
+
+```bash
+aegis add worker --yes
+```
+
+### Force Version Mismatch
+
+Proceed even if CLI and project versions don't match:
+
+```bash
+aegis add scheduler --force
+```
+
+<Warning>
+  Using `--force` with version mismatches can lead to compatibility issues. Consider running `aegis update` first.
+</Warning>
+
+### Verbose Output
+
+See detailed file operations:
+
+```bash
+aegis --verbose add worker
+```
+
+## Real-World Examples
+
+### Add Background Processing
+
+```bash
+# Start with basic API
+aegis init my-api
+
+# Week 3: Need to send emails asynchronously
+aegis add worker
+
+# Now you can define background tasks
+# app/components/worker/functions/email.py
+```
+
+### Add Scheduled Reports
+
+```bash
+# Need daily report generation
+aegis add scheduler
+
+# Define scheduled jobs
+# app/components/scheduler.py
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+scheduler = AsyncIOScheduler()
+scheduler.add_job(
+    generate_daily_report,
+    trigger="cron",
+    hour=9,
+    minute=0
+)
+```
+
+### Add Persistent Scheduler
+
+```bash
+# Upgrade to persistent scheduler
+aegis add scheduler[sqlite]
+
+# Jobs survive container restarts
+# Stored in data/scheduler.db
+```
+
+## Already Enabled Components
+
+If you try to add a component that's already enabled:
+
+```bash
+aegis add scheduler
+# Output: Already enabled: scheduler
+# Output: All requested components are already enabled!
+```
+
+Aegis Stack safely detects this and exits without making changes.
+
+## Version Compatibility
+
+Before adding components, Aegis checks version compatibility:
+
+```bash
+aegis add worker
+# Version Information:
+#    Current CLI:      0.3.0
+#    Current Template: 0.2.5
+#    ...
+```
+
+<Tip>
+  If your project template version doesn't match your CLI version, consider running `aegis update` before adding components.
+</Tip>
+
+## Next Steps
+
+After adding components:
+
+1. **Review Changes**: `git diff` to see what was added
+2. **Install Dependencies**: `uv sync` to install new packages
+3. **Update Environment**: Add any required environment variables to `.env`
+4. **Test Locally**: `make serve` to test the new component
+5. **Run Tests**: `make check` to ensure everything works
+6. **Commit**: `git add . && git commit -m "Add <component>"`
+
+<Card title="Related" icon="book">
+  - [Removing Components](/guides/removing-components)
+  - [Updating Stack](/guides/updating-stack)
+  - [Components Reference](/concepts/components)
+</Card>

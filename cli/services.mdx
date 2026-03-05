@@ -1,0 +1,352 @@
+---
+title: 'aegis services'
+description: 'List available services and their dependencies'
+---
+
+## Command Syntax
+
+```bash
+aegis services
+```
+
+## Description
+
+List all available services and their dependencies. Services are higher-level features built on top of infrastructure components.
+
+## Arguments
+
+None.
+
+## Options
+
+None.
+
+## Example Output
+
+```bash
+$ aegis services
+
+AVAILABLE SERVICES
+========================================
+
+Authentication Services
+----------------------------------------
+  auth         - User authentication with JWT tokens
+               Requires components: database
+
+AI & Machine Learning Services
+----------------------------------------
+  ai           - LLM integration with Pydantic AI or LangChain
+               Requires components: None (memory mode)
+               Note: SQLite backend requires database component
+
+Use 'aegis init PROJECT_NAME --services auth' to add services
+```
+
+## Service Details
+
+### Authentication Service
+
+<Card title="auth" icon="lock">
+  User authentication with JWT tokens
+  
+  **Features:**
+  - User registration and login
+  - JWT token-based authentication
+  - Password hashing with bcrypt
+  - Protected route decorators
+  - User management endpoints
+  
+  **Requires:** `database` component
+  
+  **Example:**
+  ```bash
+  aegis init my-app --services auth --no-interactive
+  ```
+</Card>
+
+#### Auth Service Details
+
+**API Endpoints:**
+- `POST /auth/register` - Create new user
+- `POST /auth/login` - Login and get token
+- `POST /auth/logout` - Logout current user
+- `GET /auth/me` - Get current user info
+- `GET /auth/users` - List all users (admin)
+
+**Database Models:**
+```python
+class User(Base):
+    id: int
+    email: str (unique)
+    username: str (unique)
+    hashed_password: str
+    is_active: bool
+    is_superuser: bool
+    created_at: datetime
+```
+
+**Dependencies:**
+```toml
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.6"
+```
+
+**CLI Commands:**
+```bash
+my-app auth create-test-users  # Create test users
+```
+
+**Example Usage:**
+```python
+from app.auth.dependencies import get_current_user
+
+@router.get("/protected")
+async def protected_route(user: User = Depends(get_current_user)):
+    return {"message": f"Hello {user.username}"}
+```
+
+### AI Service
+
+<Card title="ai" icon="brain">
+  LLM integration with Pydantic AI or LangChain
+  
+  **Features:**
+  - Multiple LLM providers (OpenAI, Anthropic, Google, Groq)
+  - Framework choice (Pydantic AI or LangChain)
+  - Conversation history (memory or SQLite)
+  - Streaming responses
+  - RAG support (optional)
+  
+  **Requires:** None (memory mode) or `database` (SQLite mode)
+  
+  **Example:**
+  ```bash
+  aegis init my-app --services ai[pydantic-ai,sqlite,openai] --no-interactive
+  ```
+</Card>
+
+#### AI Service Configuration
+
+**Framework Options:**
+
+<CardGroup cols={2}>
+  <Card title="Pydantic AI" icon="python">
+    Type-safe AI framework
+    
+    ```bash
+    ai[pydantic-ai,memory,openai]
+    ```
+    
+    Features:
+    - Type-safe responses
+    - Structured outputs
+    - Validation with Pydantic
+    - Async support
+  </Card>
+  <Card title="LangChain" icon="link">
+    Comprehensive LLM framework
+    
+    ```bash
+    ai[langchain,sqlite,openai]
+    ```
+    
+    Features:
+    - Chains and agents
+    - Tool integration
+    - Memory management
+    - Document loaders
+  </Card>
+</CardGroup>
+
+**Backend Options:**
+
+- **memory:** No persistence, fast, no database needed
+- **sqlite:** Persistent conversation history, requires database component
+
+**Provider Options:**
+
+- **openai:** OpenAI (GPT-4, GPT-3.5)
+- **anthropic:** Anthropic (Claude)
+- **google:** Google (Gemini)
+- **groq:** Groq (fast inference)
+
+**Configuration Syntax:**
+```bash
+ai[framework,backend,provider1,provider2,...]
+```
+
+**Examples:**
+```bash
+# Pydantic AI with memory and OpenAI
+ai[pydantic-ai,memory,openai]
+
+# LangChain with SQLite and multiple providers
+ai[langchain,sqlite,openai,anthropic,google]
+
+# Minimal (interactive config)
+ai
+```
+
+**API Endpoints:**
+- `POST /ai/chat` - Send message to AI
+- `GET /ai/models` - List available models
+- `GET /ai/history` - Get conversation history (SQLite mode)
+- `DELETE /ai/history/{conversation_id}` - Delete conversation
+
+**CLI Commands:**
+```bash
+my-app ai chat  # Interactive chat session
+my-app ai sync  # Sync provider catalogs
+```
+
+**Dependencies (Pydantic AI):**
+```toml
+pydantic-ai = "^0.0.14"
+openai = "^1.0.0"  # If using OpenAI
+anthropicsdk = "^0.8.0"  # If using Anthropic
+```
+
+**Dependencies (LangChain):**
+```toml
+langchain = "^0.1.0"
+langchain-openai = "^0.0.5"
+langchain-anthropic = "^0.1.0"
+```
+
+**Environment Variables:**
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+GROQ_API_KEY=gsk_...
+```
+
+## Service vs Component
+
+<Note>
+**Understanding the difference:**
+
+- **Components** are infrastructure (redis, database, worker, scheduler)
+- **Services** are business logic (auth, AI) built on components
+
+```bash
+# Add infrastructure
+aegis add database
+
+# Add business logic
+aegis add-service auth
+```
+</Note>
+
+## Service Dependencies
+
+Services automatically add required components:
+
+```bash
+$ aegis add-service auth
+
+Required components (will be auto-added):
+   • database: SQLite database with SQLAlchemy ORM
+
+Services to add:
+   • auth: User authentication with JWT tokens
+```
+
+## Service Combinations
+
+### Common Patterns
+
+<CardGroup cols={2}>
+  <Card title="Authenticated API" icon="lock">
+    ```bash
+    aegis init api --services auth -ni
+    ```
+    
+    Components: `backend`, `frontend`, `database`
+    
+    Services: `auth`
+  </Card>
+  <Card title="AI Chatbot" icon="comments">
+    ```bash
+    aegis init chatbot --services ai[pydantic-ai,sqlite,openai] -ni
+    ```
+    
+    Components: `backend`, `frontend`, `database`
+    
+    Services: `ai`
+  </Card>
+  <Card title="Authenticated AI App" icon="robot">
+    ```bash
+    aegis init app --services auth,ai -ni
+    ```
+    
+    Components: `backend`, `frontend`, `database`
+    
+    Services: `auth`, `ai`
+  </Card>
+  <Card title="Full-Featured SaaS" icon="cloud">
+    ```bash
+    aegis init saas \
+      --components redis,worker,scheduler \
+      --services auth,ai -ni
+    ```
+    
+    All components and services
+  </Card>
+</CardGroup>
+
+## Adding Services
+
+### During Init
+
+```bash
+aegis init my-app --services auth,ai
+```
+
+### After Init
+
+```bash
+aegis add-service auth
+aegis add-service ai[pydantic-ai,sqlite,openai]
+```
+
+### Interactive Selection
+
+```bash
+aegis add-service --interactive
+```
+
+## Service Structure
+
+Services follow a consistent structure:
+
+```
+app/
+└── {service}/
+    ├── __init__.py
+    ├── __main__.py       # CLI entrypoint (if applicable)
+    ├── config.py         # Service configuration
+    ├── models.py         # Database models (if applicable)
+    ├── schemas.py        # Pydantic schemas
+    ├── service.py        # Business logic
+    ├── router.py         # API routes
+    └── dependencies.py   # FastAPI dependencies
+```
+
+## Next Steps
+
+After reviewing services:
+
+1. **Create a project:** [`aegis init`](/cli/init)
+2. **Add services:** [`aegis add-service`](/cli/add-service)
+3. **View components:** [`aegis components`](/cli/components)
+
+## Related Commands
+
+- [`aegis init`](/cli/init) - Initialize new project with services
+- [`aegis add-service`](/cli/add-service) - Add services to existing project
+- [`aegis remove-service`](/cli/remove-service) - Remove services from project
+- [`aegis components`](/cli/components) - List available components

@@ -1,0 +1,610 @@
+---
+title: Deploying Aegis Stack
+description: How to deploy your Aegis Stack projects to production
+icon: server
+---
+
+Aegis Stack provides built-in deployment commands for deploying your application to remote servers using Docker Compose.
+
+## Overview
+
+The deployment workflow uses:
+- **SSH + rsync** for file synchronization
+- **Docker Compose** for container orchestration
+- **Production overrides** for optimized container configs
+- **Traefik** (optional) for reverse proxy and TLS
+
+<Note>
+  The deployment commands are designed for single-server deployments. For multi-server or Kubernetes deployments, you'll need to adapt the Docker Compose files accordingly.
+</Note>
+
+## Prerequisites
+
+<Steps>
+  <Step title="Server Requirements">
+    - Ubuntu 20.04+ or Debian 11+ (other distros supported with modifications)
+    - Root or sudo access
+    - SSH access configured
+    - 2GB+ RAM recommended
+    - Docker not required initially (setup script installs it)
+  </Step>
+
+  <Step title="Local Requirements">
+    - SSH key-based authentication configured
+    - `rsync` installed
+    - `ssh` client installed
+  </Step>
+
+  <Step title="Project Requirements">
+    - Generated with `ingress` component for production deployments
+    - `.env` file with production configuration
+  </Step>
+</Steps>
+
+## Quick Start
+
+<Steps>
+  <Step title="Initialize Deployment Config">
+    ```bash
+    aegis deploy-init --host 192.168.1.100
+    ```
+
+    This creates `.aegis/deploy.yml`:
+    ```yaml .aegis/deploy.yml
+    server:
+      host: 192.168.1.100
+      user: root
+      path: /opt/my-api
+
+    docker:
+      context: my-api-remote
+    ```
+
+    <Tip>
+      Add `.aegis/` to `.gitignore` to avoid committing server credentials.
+    </Tip>
+  </Step>
+
+  <Step title="Provision the Server">
+    Run this once on a fresh server:
+
+    ```bash
+    aegis deploy-setup
+    ```
+
+    This script:
+    - Installs Docker and Docker Compose
+    - Configures firewall (UFW)
+    - Opens ports 80, 443, 22
+    - Sets up system for production use
+  </Step>
+
+  <Step title="Deploy Your Application">
+    ```bash
+    aegis deploy
+    ```
+
+    This:
+    - Syncs files to the server
+    - Builds Docker images
+    - Starts all services
+    - Configures Traefik (if enabled)
+  </Step>
+
+  <Step title="Verify Deployment">
+    ```bash
+    aegis deploy-status
+    ```
+
+    Or visit your server:
+    ```
+    http://192.168.1.100/
+    http://192.168.1.100/dashboard/  # Overseer
+    ```
+  </Step>
+</Steps>
+
+## Deployment Commands
+
+### aegis deploy-init
+
+Initialize deployment configuration:
+
+```bash
+aegis deploy-init --host myserver.com --user deploy
+```
+
+<Accordion title="Options">
+  - `--host, -h`: Server IP or hostname (required)
+  - `--user, -u`: SSH user (default: `root`)
+  - `--path, -p`: Deployment path on server (default: `/opt/{project-name}`)
+  - `--project-path`: Local project path (default: current directory)
+</Accordion>
+
+**Interactive prompt**: If you don't provide `--host`, you'll be prompted.
+
+### aegis deploy-setup
+
+Provision a server for deployment:
+
+```bash
+aegis deploy-setup
+```
+
+Run this **once** on a fresh server. It executes `scripts/server-setup.sh` which:
+
+<CodeGroup>
+```bash Server Setup Script
+#!/bin/bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# Install Docker Compose
+apt-get update
+apt-get install -y docker-compose-plugin
+
+# Configure firewall
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw --force enable
+
+# Add deploy user to docker group
+usermod -aG docker $USER
+```
+</CodeGroup>
+
+<Note>
+  The `server-setup.sh` script is included in projects generated with the `ingress` component.
+</Note>
+
+### aegis deploy
+
+Deploy your application:
+
+```bash
+aegis deploy
+```
+
+This command:
+1. **Syncs files** via rsync (excludes `.git`, `__pycache__`, etc.)
+2. **Copies `.env`** to the server
+3. **Stops existing services** via `docker compose down`
+4. **Builds images** (if `--build` is enabled)
+5. **Starts services** via `docker compose up -d`
+6. **Restarts Traefik** (if ingress is enabled)
+
+<Accordion title="Options">
+  - `--project-path`: Local project path
+  - `--build / --no-build`: Build images (default: `true`)
+</Accordion>
+
+**Example - Deploy without rebuilding**:
+```bash
+aegis deploy --no-build
+```
+
+Useful when only config files changed.
+
+### aegis deploy-logs
+
+View application logs:
+
+```bash
+aegis deploy-logs
+```
+
+Follow logs in real-time (default behavior).
+
+**View specific service**:
+```bash
+aegis deploy-logs --service webserver
+aegis deploy-logs --service worker-system
+```
+
+**No follow mode**:
+```bash
+aegis deploy-logs --no-follow
+```
+
+### aegis deploy-status
+
+Check service status:
+
+```bash
+aegis deploy-status
+```
+
+Shows running containers, ports, and health:
+```
+Service status on 192.168.1.100:
+NAME           STATUS    PORTS
+webserver      Up        0.0.0.0:8000->8000/tcp
+traefik        Up        0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+redis          Up        6379/tcp
+```
+
+### aegis deploy-stop
+
+Stop all services:
+
+```bash
+aegis deploy-stop
+```
+
+Runs `docker compose down` on the server.
+
+### aegis deploy-restart
+
+Restart all services:
+
+```bash
+aegis deploy-restart
+```
+
+Useful after changing environment variables.
+
+### aegis deploy-shell
+
+Open a shell in a container:
+
+```bash
+aegis deploy-shell
+aegis deploy-shell --service redis
+```
+
+Default service is `webserver`.
+
+## Production Configuration
+
+Aegis Stack uses `docker-compose.prod.yml` for production overrides:
+
+<CodeGroup>
+```yaml docker-compose.yml
+# Base configuration
+services:
+  webserver:
+    build: .
+    volumes:
+      - ./app:/app/app  # Dev: Live reload
+    environment:
+      - AUTO_RELOAD=true
+```
+
+```yaml docker-compose.prod.yml
+# Production overrides
+services:
+  webserver:
+    volumes: []  # Remove dev volume mounts
+    environment:
+      - AUTO_RELOAD=false
+    restart: unless-stopped
+```
+</CodeGroup>
+
+Key differences:
+- **No volume mounts** - Code is baked into images
+- **Restart policy** - Containers auto-restart on failure
+- **No auto-reload** - Stable production behavior
+
+## Environment Variables
+
+Create a production `.env` file:
+
+```bash .env
+# App settings
+APP_ENV=prod
+LOG_LEVEL=INFO
+
+# Security
+SECRET_KEY=your-production-secret-key-here
+
+# Database (if using database component)
+DATABASE_URL=sqlite:///data/app.db
+
+# Redis (if using worker component)
+REDIS_URL=redis://redis:6379
+
+# Auth (if using auth service)
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Observability (if using observability)
+LOGFIRE_TOKEN=your-logfire-token
+```
+
+<Warning>
+  Never commit `.env` to git. Use `.env.example` as a template.
+</Warning>
+
+## TLS / HTTPS Setup
+
+If you have a domain name, enable automatic TLS with Let's Encrypt:
+
+1. **Configure domain in deploy.yml**:
+
+```yaml .aegis/deploy.yml
+server:
+  host: 192.168.1.100
+  user: root
+  path: /opt/my-api
+
+docker:
+  context: my-api-remote
+
+# Enable TLS
+domain: example.com
+acme_email: admin@example.com
+```
+
+2. **Point DNS to your server**:
+```
+A    example.com      192.168.1.100
+A    *.example.com    192.168.1.100
+```
+
+3. **Deploy**:
+```bash
+aegis deploy
+```
+
+Traefik automatically requests a Let's Encrypt certificate.
+
+<Tip>
+  Traefik stores certificates in `data/traefik/acme.json`. Back this up to avoid rate limits.
+</Tip>
+
+## File Sync Exclusions
+
+The deploy command excludes these paths:
+
+```bash
+--exclude .git
+--exclude __pycache__
+--exclude .venv
+--exclude *.pyc
+--exclude .pytest_cache
+--exclude .ruff_cache
+--exclude data/
+--exclude .env
+--exclude .aegis/
+```
+
+**Why exclude `.env`?**
+
+The `.env` file is copied separately after the rsync to prevent it from being overwritten.
+
+**Why exclude `data/`?**
+
+Prevents overwriting production data (databases, logs, etc.).
+
+## Real-World Deployment Examples
+
+### Basic API Deployment
+
+```bash
+# Initialize
+aegis deploy-init --host api.example.com
+
+# Setup server (one time)
+aegis deploy-setup
+
+# Deploy
+aegis deploy
+
+# Check status
+aegis deploy-status
+
+# View logs
+aegis deploy-logs --service webserver
+```
+
+### Deployment with Workers
+
+```bash
+# Deploy with background workers
+aegis deploy
+
+# Check worker logs
+aegis deploy-logs --service worker-system
+
+# Monitor worker queue
+aegis deploy-shell --service webserver
+# Inside container:
+python -m app.cli redis queue
+```
+
+### Deployment with Custom Domain
+
+```bash
+# Configure domain
+aegis deploy-init --host 192.168.1.100
+# Edit .aegis/deploy.yml to add domain
+
+# Deploy
+aegis deploy
+
+# Access via domain
+curl https://example.com/health
+```
+
+### Zero-Downtime Deployment
+
+For minimal downtime:
+
+```bash
+# Don't stop services during sync
+aegis deploy --no-build
+
+# Only restart changed services
+aegis deploy-shell
+docker compose up -d --no-deps webserver
+```
+
+## Troubleshooting
+
+### SSH Connection Failed
+
+```bash
+# Test SSH manually
+ssh root@192.168.1.100
+
+# Add host key if needed
+ssh-keyscan -H 192.168.1.100 >> ~/.ssh/known_hosts
+```
+
+### Deployment Failed
+
+```bash
+# Check server logs
+aegis deploy-logs
+
+# Check Docker status on server
+aegis deploy-shell
+docker ps -a
+```
+
+### Services Won't Start
+
+```bash
+# View full logs
+aegis deploy-logs --no-follow
+
+# Check compose files
+aegis deploy-shell
+cat docker-compose.yml
+cat docker-compose.prod.yml
+```
+
+### Port Already in Use
+
+```bash
+# Check what's using port 80
+aegis deploy-shell
+sudo netstat -tulpn | grep :80
+
+# Stop conflicting service
+sudo systemctl stop nginx
+```
+
+## CI/CD Integration
+
+Integrate deployment into GitHub Actions:
+
+```yaml .github/workflows/deploy.yml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Install Aegis Stack
+        run: pip install aegis-stack
+      
+      - name: Deploy
+        run: |
+          aegis deploy-init --host ${{ secrets.SERVER_HOST }} --user root
+          aegis deploy --yes
+```
+
+## Alternative Deployment Options
+
+While Aegis Stack provides built-in deployment commands, you can also:
+
+<CardGroup cols={2}>
+  <Card title="Docker Context" icon="docker">
+    Use Docker contexts for remote deployment:
+    ```bash
+    docker context create remote \
+      --docker "host=ssh://user@host"
+    docker --context remote compose up -d
+    ```
+  </Card>
+  
+  <Card title="Kubernetes" icon="ship">
+    Convert Docker Compose to Kubernetes:
+    ```bash
+    kompose convert
+    kubectl apply -f .
+    ```
+  </Card>
+  
+  <Card title="Managed Platforms" icon="cloud">
+    Deploy to platforms like:
+    - Railway
+    - Fly.io
+    - Digital Ocean App Platform
+  </Card>
+  
+  <Card title="Manual Deploy" icon="terminal">
+    Traditional SSH + systemd approach:
+    ```bash
+    rsync -avz . user@host:/opt/app
+    ssh user@host 'cd /opt/app && make deploy'
+    ```
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Strong Secrets">
+    Generate secure secrets:
+    ```bash
+    python -c "import secrets; print(secrets.token_urlsafe(32))"
+    ```
+  </Step>
+
+  <Step title="Enable Monitoring">
+    Use Overseer + external monitoring:
+    - Set up uptime checks (e.g., UptimeRobot)
+    - Configure alerting (email, Slack, PagerDuty)
+  </Step>
+
+  <Step title="Backup Data">
+    Regular backups of:
+    - `data/` directory (databases)
+    - `.env` file
+    - `data/traefik/acme.json` (TLS certificates)
+  </Step>
+
+  <Step title="Test Before Deploy">
+    ```bash
+    # Run tests locally
+    make check
+    
+    # Deploy to staging first
+    aegis deploy-init --host staging.example.com
+    aegis deploy
+    ```
+  </Step>
+
+  <Step title="Version Control">
+    Tag releases:
+    ```bash
+    git tag -a v1.0.0 -m "Production release v1.0.0"
+    git push origin v1.0.0
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<Card title="Related" icon="book">
+  - [Components Reference](/concepts/components)
+  - [CLI Reference](/cli/init)
+  - [Integration Patterns](/guides/integration-patterns)
+</Card>

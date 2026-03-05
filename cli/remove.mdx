@@ -1,0 +1,296 @@
+---
+title: 'aegis remove'
+description: 'Remove components from an existing Aegis Stack project'
+---
+
+## Command Syntax
+
+```bash
+aegis remove [COMPONENTS] [OPTIONS]
+```
+
+## Description
+
+Remove components from an existing Aegis Stack project. This command removes component files and updates project configuration.
+
+<Warning>
+**This operation deletes files and cannot be easily undone!**
+
+Always commit your changes before running this command.
+</Warning>
+
+## Arguments
+
+<ParamField path="COMPONENTS" type="string">
+  Comma-separated list of components to remove.
+  
+  Available components: `redis`, `worker`, `scheduler`, `database`
+  
+  **Note:** Core components (`backend`, `frontend`) cannot be removed.
+</ParamField>
+
+## Options
+
+<ParamField path="--interactive" type="boolean" default={false}>
+  Use interactive component selection.
+  
+  **Aliases:** `-i`
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+<ParamField path="--force" type="boolean" default={false}>
+  Force through version mismatch warnings.
+  
+  **Aliases:** `-f`
+</ParamField>
+
+## Examples
+
+### Remove a single component
+
+```bash
+aegis remove scheduler
+```
+
+Removes the scheduler component from your project.
+
+### Remove multiple components
+
+```bash
+aegis remove worker,redis
+```
+
+Removes both worker and redis components.
+
+### Interactive mode
+
+```bash
+aegis remove --interactive
+```
+
+Opens an interactive menu to select components for removal.
+
+### Remove from specific project
+
+```bash
+aegis remove scheduler --project-path ../my-project
+```
+
+Removes scheduler from a project in a different directory.
+
+### Auto-confirm (dangerous)
+
+```bash
+aegis remove worker --yes
+```
+
+Removes worker without prompting for confirmation. Use with caution!
+
+### Verbose output
+
+```bash
+aegis --verbose remove worker
+```
+
+Shows detailed file operations during removal.
+
+## Automatic Cleanup
+
+<Note>
+Aegis automatically removes orphaned dependencies:
+
+- Removing **worker** will auto-remove **redis** if no other component uses it
+- Dependencies are shown before confirmation
+</Note>
+
+## What Gets Removed
+
+When you remove a component, Aegis will:
+
+1. **Delete component files** - Source code, configs, and tests
+2. **Update configuration** - `pyproject.toml`, `docker-compose.yml`, `.copier-answers.yml`
+3. **Remove dependencies** - Unused Python packages from `pyproject.toml`
+4. **Remove entrypoints** - CLI commands for the component
+5. **Update documentation** - Remove component-specific sections
+
+<Warning>
+**Database files and migrations are NOT deleted**
+
+Removing the `database` or `scheduler` component will not delete:
+- Database files in `data/`
+- Alembic migration files
+- Existing data
+
+Manually delete these if needed.
+</Warning>
+
+### Example Output
+
+```bash
+$ aegis remove scheduler
+
+Aegis Stack - Remove Components
+==================================================
+Project: /home/user/my-app
+
+IMPORTANT: Scheduler Persistence Warning
+   Your scheduler uses SQLite for job persistence.
+   The database file at data/scheduler.db will remain.
+
+   To keep your job history: Leave the database component
+   To remove all data: Also remove the database component
+
+Components to remove:
+   • scheduler: Scheduled task execution with APScheduler
+
+WARNING: This will DELETE component files from your project!
+   Make sure you have committed your changes to git.
+
+Remove these components? [y/N]: y
+
+Removing components...
+
+Removing scheduler...
+   Removed 12 files
+
+Components removed successfully!
+
+Next Steps:
+   1. Review changes: git diff
+   2. Install dependencies: make install
+   3. Restart services: make dev
+```
+
+## Component Not Enabled
+
+If you try to remove a component that's not enabled:
+
+```bash
+$ aegis remove redis
+
+Not enabled: redis
+No components to remove!
+```
+
+## Special Cases
+
+### Removing Scheduler with Persistence
+
+When removing a scheduler that uses SQLite backend:
+
+```
+IMPORTANT: Scheduler Persistence Warning
+   Your scheduler uses SQLite for job persistence.
+   The database file at data/scheduler.db will remain.
+
+   To keep your job history: Leave the database component
+   To remove all data: Also remove the database component
+```
+
+The scheduler code is removed, but the database file and table remain. To fully clean up:
+
+```bash
+# Remove the component
+aegis remove scheduler
+
+# Manually delete the database file
+rm data/scheduler.db
+
+# Or remove the entire database component
+aegis remove database
+```
+
+### Removing Worker
+
+When removing the worker component, redis is also removed if no other component uses it:
+
+```bash
+$ aegis remove worker
+
+Auto-removing redis (no standalone functionality, only used by worker)
+
+Components to remove:
+   • worker: Background job worker with Dramatiq
+   • redis: Redis cache and message broker
+```
+
+### Cannot Remove Core Components
+
+Core components cannot be removed:
+
+```bash
+$ aegis remove backend
+
+Cannot remove core component: backend
+No components to remove!
+```
+
+## Safety Checklist
+
+Before removing components:
+
+<CardGroup cols={2}>
+  <Card title="Commit Changes" icon="code-commit">
+    ```bash
+    git add .
+    git commit -m "Before removing scheduler"
+    ```
+  </Card>
+  <Card title="Backup Data" icon="database">
+    Backup any database files in `data/` directory
+  </Card>
+  <Card title="Review Dependencies" icon="sitemap">
+    Check if other components depend on what you're removing
+  </Card>
+  <Card title="Test After" icon="flask">
+    Run `make test` after removal to ensure nothing broke
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Undo a removal
+
+If you removed a component by mistake:
+
+```bash
+# Revert using git
+git checkout .
+
+# Or re-add the component
+aegis add scheduler
+```
+
+### Files still present after removal
+
+Some files may remain if they were:
+- Modified by you (Aegis won't delete customized files)
+- Created manually (not part of the original template)
+- Shared between multiple components
+
+Review with `git status` and delete manually if needed.
+
+<Tip>
+Use `--verbose` to see exactly which files are being deleted:
+
+```bash
+aegis --verbose remove scheduler
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis add`](/cli/add) - Add components to project
+- [`aegis remove-service`](/cli/remove-service) - Remove services from project
+- [`aegis components`](/cli/components) - List available components

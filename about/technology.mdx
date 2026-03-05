@@ -1,0 +1,294 @@
+---
+title: "Technology Stack"
+description: "The battle-tested technologies powering Aegis Stack and why they were chosen"
+---
+
+Aegis Stack is built on the shoulders of giants. Each tool was thoughtfully selected for its excellence in solving specific problems, and for how well it composes with others.
+
+## The Sebastián Ramírez Ecosystem
+
+<CardGroup cols={2}>
+  <Card title="FastAPI" icon="bolt" href="https://fastapi.tiangolo.com/">
+    Modern, fast web framework with automatic API documentation and type safety
+  </Card>
+  <Card title="Typer" icon="terminal" href="https://typer.tiangolo.com/">
+    CLI framework with the same type-driven philosophy as FastAPI
+  </Card>
+</CardGroup>
+
+### Why FastAPI?
+
+FastAPI answered a question that had bothered developers for their entire careers: **"Why do things always have to be so difficult?"**
+
+What makes FastAPI special:
+
+- **Intentional IDE support** - Built with developer experience in mind
+- **Type-driven design** - Type hints aren't just documentation, they drive behavior
+- **Automatic API docs** - OpenAPI/Swagger documentation generated automatically
+- **Fast** - Performance on par with NodeJS and Go
+
+<Note>
+  FastAPI was the first concrete example of what great Developer Experience (DX) means - every little decision made to make your life easier.
+</Note>
+
+### Why Typer?
+
+When you find someone whose work resonates with you, you pay attention to what else they build. After FastAPI, Typer was an easy choice:
+
+- Same type-driven philosophy
+- CLI commands feel like natural Python functions
+- Automatic help text generation
+- Built-in validation through Pydantic
+
+## The Pydantic Ecosystem: Defensive Coding as Philosophy
+
+<CardGroup cols={2}>
+  <Card title="Pydantic" icon="shield" href="https://docs.pydantic.dev/">
+    Data validation and settings management using Python type annotations
+  </Card>
+  <Card title="Pydantic AI" icon="brain" href="https://ai.pydantic.dev/">
+    AI framework with the same validation-first approach
+  </Card>
+</CardGroup>
+
+### Why Pydantic?
+
+Pydantic isn't just a validation library - it's infrastructure. The realization that **"type hints are wasted, not doing anything"** changed everything.
+
+```python
+from pydantic import BaseModel, Field
+
+class User(BaseModel):
+    """Type hints that actually do something."""
+    username: str = Field(min_length=3, max_length=50)
+    email: str = Field(pattern=r'^[^@]+@[^@]+\.[^@]+$')
+    age: int = Field(ge=0, le=150)
+
+# Validation happens automatically
+user = User(
+    username="alice",
+    email="alice@example.com",
+    age=30
+)
+```
+
+**Key advantages:**
+
+- **Runtime validation** - Types are enforced at runtime, not just in your IDE
+- **Rust-powered V2** - Rewritten in Rust for serious performance
+- **Everywhere** - Same models work in FastAPI, CLI, config, database
+- **Defensive coding** - Protect yourself from yourself
+
+<Accordion title="Why defensive coding matters">
+  When leading a team of 10+ developers, it becomes very apparent how important defensive coding is. Being able to protect ourselves from ourselves became the mission.
+
+  Having Pydantic at every part of the system became core to everything. It's why Aegis Stack uses Pydantic models for validation at API endpoints, CLI commands, configuration, and database models.
+
+  One source of truth, validated everywhere.
+</Accordion>
+
+### Why Pydantic AI?
+
+When the people who built the data validation layer that powers half of modern Python decide to tackle AI frameworks, you pay attention.
+
+Pydantic AI brings the same validation-first approach to LLM interactions:
+
+```python
+from pydantic_ai import Agent
+
+class UserQuery(BaseModel):
+    query: str
+    context: dict[str, Any]
+
+agent = Agent(
+    model="openai:gpt-4",
+    result_type=UserQuery,  # Validated results
+)
+```
+
+## The Foundation
+
+### SQLModel - Type-Safe Database Interactions
+
+<Card title="SQLModel" icon="database" href="https://sqlmodel.tiangolo.com/">
+  SQL databases in Python, designed to be intuitive, easy to use, highly compatible, and robust
+</Card>
+
+SQLModel combines SQLAlchemy and Pydantic:
+
+```python
+from sqlmodel import SQLModel, Field, create_engine, Session
+
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    username: str = Field(index=True, unique=True)
+    email: str
+
+# Same model for validation AND database
+engine = create_engine("sqlite:///database.db")
+SQLModel.metadata.create_all(engine)
+```
+
+**Why SQLModel?**
+
+- **One model** - Same class for Pydantic validation and SQLAlchemy ORM
+- **Full type safety** - Editor support with autocompletion
+- **FastAPI integration** - Works seamlessly with FastAPI
+- **Simple and powerful** - Easy for beginners, powerful for experts
+
+### Copier - Template Evolution Engine
+
+<Card title="Copier" icon="copy" href="https://copier.readthedocs.io/">
+  Template engine that supports updates and evolution over time
+</Card>
+
+Copier is what makes Aegis Stack's modular evolution possible:
+
+```bash
+# Generate project
+aegis init my-api
+
+# Add components later
+aegis add scheduler --project-path ./my-api
+
+# Update when template improves
+aegis update
+```
+
+**Why Copier over Cookiecutter?**
+
+- **Update support** - Pull in template improvements without regenerating
+- **Smart merging** - Handles conflicts intelligently
+- **Jinja2 templating** - Familiar, powerful templating engine
+- **Answer persistence** - Remembers your choices for updates
+
+### Docker - Consistent Environments
+
+<Card title="Docker" icon="docker" href="https://www.docker.com/">
+  Containerization for consistent development and deployment environments
+</Card>
+
+Every Aegis Stack project includes Docker configuration:
+
+```bash
+# Start everything with one command
+make serve
+
+# Or use Docker Compose directly
+docker compose up
+```
+
+**What's included:**
+
+- **Development environment** - Consistent across all machines
+- **Service dependencies** - Redis, PostgreSQL when needed
+- **Hot reload** - Code changes reflected immediately
+- **Production-ready** - Same containers in dev and prod
+
+## The Astral Revolution
+
+<CardGroup cols={2}>
+  <Card title="uv" icon="rocket" href="https://docs.astral.sh/uv/">
+    Extremely fast Python package installer and resolver
+  </Card>
+  <Card title="ruff" icon="broom" href="https://docs.astral.sh/ruff/">
+    Lightning-fast Python linter and formatter
+  </Card>
+  <Card title="uvx" icon="play" href="https://docs.astral.sh/uv/guides/tools/">
+    Run Python tools without installation
+  </Card>
+</CardGroup>
+
+### Why uv?
+
+**uv** is so fast you have to double-check that packages actually installed:
+
+```bash
+# Install dependencies instantly
+uv sync
+
+# Add a package
+uv add fastapi
+
+# Run scripts
+uv run python main.py
+```
+
+**Performance comparison:**
+
+- **pip**: ~30-60 seconds for typical install
+- **poetry**: ~20-40 seconds
+- **uv**: ~1-3 seconds (seriously)
+
+### Why ruff?
+
+**ruff** replaced multiple tools with one:
+
+```bash
+# One command for linting and formatting
+make lint
+make format
+
+# Or directly
+ruff check .
+ruff format .
+```
+
+**What it replaces:**
+
+- flake8
+- pylint
+- black
+- isort
+- pyupgrade
+- And more...
+
+### Why uvx?
+
+**uvx** changed the onboarding game completely:
+
+```bash
+# Try Aegis Stack RIGHT NOW - no installation
+uvx aegis-stack init my-project
+```
+
+<Note>
+  This is the difference between "check out this framework, here's the 47-step installation guide" and "just run this one command and see for yourself."
+</Note>
+
+**The uvx advantage:**
+
+- **No installation** - Run tools without committing to them
+- **No setup** - No virtual environments, no PATH configuration
+- **No cleanup** - If you don't like it, it's like you were never there
+- **Instant evaluation** - Five minutes from discovery to working code
+
+## The Pattern: Betting on Ecosystems
+
+Aegis Stack doesn't just collect tools - it collects **ecosystems**.
+
+When you find creators who demonstrate:
+
+- **Consistent philosophy** - Design principles that resonate
+- **Proven execution** - Track record of excellent work
+- **Genuine care for DX** - Developer experience as a priority
+
+...you don't just adopt one tool. You watch what else they build, because chances are it'll solve problems you're already facing or will face soon.
+
+<CardGroup cols={3}>
+  <Card title="Sebastián Ramírez" icon="user">
+    FastAPI, Typer, SQLModel
+  </Card>
+  <Card title="Samuel Colvin" icon="user">
+    Pydantic, Pydantic AI, Logfire
+  </Card>
+  <Card title="Astral Team" icon="users">
+    uv, ruff, uvx
+  </Card>
+</CardGroup>
+
+**This is how experienced developers actually select technology:**
+
+Not by feature comparison spreadsheets, but by recognizing excellence and betting on the people who consistently deliver it.
+
+Aegis Stack is the result of that pattern recognition made concrete - a platform built on ecosystems we trust, configured in ways we've battle-tested, ready for you to build on.

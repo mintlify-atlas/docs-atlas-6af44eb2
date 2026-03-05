@@ -1,0 +1,261 @@
+---
+title: 'aegis add'
+description: 'Add components to an existing Aegis Stack project'
+---
+
+## Command Syntax
+
+```bash
+aegis add [COMPONENTS] [OPTIONS]
+```
+
+## Description
+
+Add components to an existing Aegis Stack project. This command uses Copier's update mechanism to add new components to a project that was generated with `aegis init`.
+
+<Note>
+This command only works with projects generated using Copier (the default since v0.2.0).
+</Note>
+
+## Arguments
+
+<ParamField path="COMPONENTS" type="string">
+  Comma-separated list of components to add.
+  
+  Available components: `redis`, `worker`, `scheduler`, `database`
+  
+  Use bracket syntax for scheduler backend: `scheduler[sqlite]`
+</ParamField>
+
+## Options
+
+<ParamField path="--interactive" type="boolean" default={false}>
+  Use interactive component selection.
+  
+  **Aliases:** `-i`
+</ParamField>
+
+<ParamField path="--backend" type="string">
+  Scheduler backend: `memory` (default) or `sqlite` (enables persistence).
+  
+  Only applicable when adding the scheduler component.
+  
+  **Aliases:** `-b`
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+<ParamField path="--force" type="boolean" default={false}>
+  Force through version mismatch warnings.
+  
+  **Aliases:** `-f`
+</ParamField>
+
+## Examples
+
+### Add a single component
+
+```bash
+aegis add scheduler
+```
+
+Adds the scheduler component to your project.
+
+### Add multiple components
+
+```bash
+aegis add worker,database
+```
+
+Adds both worker and database components.
+
+### Add scheduler with SQLite persistence
+
+```bash
+aegis add scheduler[sqlite]
+```
+
+Adds scheduler with SQLite backend for persistent job storage.
+
+Alternatively, using the `--backend` flag:
+
+```bash
+aegis add scheduler --backend sqlite
+```
+
+### Interactive mode
+
+```bash
+aegis add --interactive
+```
+
+Opens an interactive menu to select components.
+
+### Add to specific project
+
+```bash
+aegis add scheduler --project-path ../my-project
+```
+
+Adds scheduler to a project in a different directory.
+
+### Auto-confirm
+
+```bash
+aegis add worker --yes
+```
+
+Adds worker without prompting for confirmation.
+
+### Verbose output
+
+```bash
+aegis --verbose add worker
+```
+
+Shows detailed file operations during the add process.
+
+## Dependency Resolution
+
+<Note>
+Aegis automatically adds required dependencies:
+
+- Adding **worker** will auto-add **redis** if not present
+- Adding **scheduler[sqlite]** will auto-add **database** if not present
+- Dependencies are shown before confirmation
+</Note>
+
+## What Gets Added
+
+When you add a component, Aegis will:
+
+1. **Add component files** - Source code, configs, and tests
+2. **Update configuration** - `pyproject.toml`, `docker-compose.yml`, `.copier-answers.yml`
+3. **Update dependencies** - Python packages in `pyproject.toml`
+4. **Create entrypoints** - CLI commands for the component
+5. **Update documentation** - Component-specific README sections
+
+### Example Output
+
+```bash
+$ aegis add worker
+
+Aegis Stack - Add Components
+==================================================
+Project: /home/user/my-app
+
+Auto-added dependencies: redis
+
+Components to add:
+   • redis: Redis cache and message broker
+   • worker: Background job worker with Dramatiq
+
+Add these components? [Y/n]: y
+
+Updating project...
+
+Adding redis...
+   Added 5 files
+
+Adding worker...
+   Added 8 files
+
+Components added successfully!
+
+Project Structure:
+   ✓ backend (FastAPI server)
+   ✓ frontend (Flet interface)
+   ✓ redis (Redis cache)
+   ✓ worker (Background jobs)
+
+Next Steps:
+   1. Review changes: git diff
+   2. Install dependencies: make install
+   3. Start services: make dev
+```
+
+## Already Enabled Components
+
+If you try to add a component that's already enabled:
+
+```bash
+$ aegis add redis
+
+Already enabled: redis
+All requested components are already enabled!
+```
+
+## Version Compatibility
+
+<Warning>
+The CLI checks version compatibility between your installed CLI and the project's template version. If there's a mismatch, you'll see a warning.
+
+Use `--force` to proceed anyway, or update your CLI/project to matching versions.
+</Warning>
+
+## Git Repository Required
+
+<Warning>
+This command requires your project to be in a git repository. Copier uses git to track changes.
+
+If you haven't initialized git yet:
+
+```bash
+cd my-app
+git init
+git add .
+git commit -m "Initial commit"
+```
+</Warning>
+
+## Troubleshooting
+
+### "Not a Copier project"
+
+This error means your project wasn't generated with `aegis init` (v0.2.0+). Projects from older versions need to be regenerated.
+
+### "Not a git repository"
+
+Initialize git in your project:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+```
+
+### "Version mismatch"
+
+Your CLI version doesn't match the project's template version. Options:
+
+1. Update CLI: `uvx --upgrade aegis-stack`
+2. Update project: `aegis update`
+3. Force through: `aegis add scheduler --force`
+
+<Tip>
+Always commit your changes before running `aegis add` so you can easily review what changed:
+
+```bash
+git add .
+git commit -m "Before adding scheduler"
+aegis add scheduler
+git diff  # Review changes
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis remove`](/cli/remove) - Remove components from project
+- [`aegis add-service`](/cli/add-service) - Add services to project
+- [`aegis components`](/cli/components) - List available components
+- [`aegis update`](/cli/update) - Update project to newer template version

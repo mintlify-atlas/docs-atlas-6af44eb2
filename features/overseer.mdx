@@ -1,0 +1,211 @@
+---
+title: "Overseer"
+description: "Built-in system dashboard for real-time monitoring"
+---
+
+Overseer is the built-in system dashboard that ships with every Aegis Stack project. It provides a live view of what your application is doing at runtime—across core components (Backend, Database, Workers, Scheduler) and services (Auth, AI, Comms)—through a web UI.
+
+<Info>
+  Overseer goes beyond simple health checks. You can inspect worker queues, scheduled jobs, database state, and AI usage, all in one place, without wiring up external tools.
+</Info>
+
+## What You Get
+
+Overseer gives you instant visibility into your running system:
+
+<CardGroup cols={2}>
+  <Card title="Component Health" icon="heart-pulse">
+    Real-time status of all components with response times and detailed metadata
+  </Card>
+  <Card title="System Metrics" icon="chart-line">
+    Worker queues, scheduled jobs, database connections, and AI usage statistics
+  </Card>
+  <Card title="Architecture View" icon="diagram-project">
+    Visual diagram showing component relationships and data flow
+  </Card>
+  <Card title="Activity Feed" icon="stream">
+    Live feed of system events, errors, and component state changes
+  </Card>
+</CardGroup>
+
+## Accessing Overseer
+
+Overseer is available at the root URL of your application:
+
+```bash
+# Start your application
+make serve
+
+# Open in browser
+open http://localhost:8000
+```
+
+The dashboard auto-refreshes every 30 seconds to show the latest system state.
+
+## Dashboard Views
+
+Overseer provides three different views for inspecting your system:
+
+### Stack View (Default)
+
+The default view shows:
+- **Status Overview Panel**: Compact list of all components with health indicators
+- **Activity Feed**: Real-time stream of system events
+
+Click any component in the status overview to open a detailed modal with metrics and configuration.
+
+### Cards View
+
+Grid layout showing individual component cards with:
+- Current status and health indicator
+- Key metrics (queue sizes, active connections, etc.)
+- Quick actions and configuration
+
+Each card is clickable for detailed inspection.
+
+### Diagram View
+
+Architecture diagram showing:
+- All components and services
+- Connection relationships
+- Data flow between components
+- Health status for each node
+
+Use the view toggle button (top right) to cycle through views.
+
+## Component Details
+
+Click any component to see detailed information:
+
+<Accordion title="Backend (Server)">
+  - FastAPI version and uptime
+  - Active routes and endpoints
+  - Request statistics
+  - Flet frontend status
+</Accordion>
+
+<Accordion title="Database">
+  - Connection pool status
+  - Active connections
+  - Database version (PostgreSQL or SQLite)
+  - Schema information
+</Accordion>
+
+<Accordion title="Worker">
+  - Queue status and depth
+  - Active jobs and processing rate
+  - Failed jobs and retry status
+  - Worker pool health
+</Accordion>
+
+<Accordion title="Scheduler">
+  - Active task count
+  - Upcoming scheduled jobs
+  - Next run times
+  - Task execution history
+</Accordion>
+
+<Accordion title="AI Service">
+  - Active provider and model
+  - Token usage and costs
+  - Request success rate
+  - Recent conversations
+  - RAG collection status (if enabled)
+</Accordion>
+
+<Accordion title="Auth Service">
+  - Total user count
+  - Active sessions
+  - Token expiration settings
+  - Recent authentication activity
+</Accordion>
+
+<Accordion title="Comms Service">
+  - Email provider status (Resend)
+  - SMS provider status (Twilio)
+  - Message queue depth
+  - Delivery statistics
+</Accordion>
+
+## Theme Support
+
+Overseer includes both light and dark themes. Use the theme toggle button (top right) to switch between them.
+
+## Technical Details
+
+<Note>
+  Overseer is built with Flet, a Python framework for building web and desktop applications. It runs as part of your FastAPI application and shares the same runtime.
+</Note>
+
+**How it works:**
+
+1. Overseer queries the `/health/` API endpoint every 30 seconds
+2. The health endpoint gathers status from all registered components
+3. Component cards update with the latest metrics
+4. Status changes trigger activity feed updates
+
+**Performance:**
+
+- Health checks run in parallel for fast response times
+- Component metadata is cached to reduce overhead
+- Dashboard uses efficient delta updates (no full page reloads)
+
+## Customization
+
+Overseer adapts automatically to your component selection:
+
+```bash
+# Add a scheduler - Overseer shows it immediately
+aegis add scheduler --project-path ./my-api
+
+# Remove worker - Overseer hides it
+aegis remove worker --project-path ./my-api
+```
+
+No configuration needed. If a component exists, Overseer monitors it.
+
+## Source Code
+
+Overseer's implementation can be found in your generated project:
+
+```
+app/components/frontend/
+├── main.py              # Dashboard layout and refresh logic
+├── dashboard/
+│   ├── status_overview.py   # Status panel
+│   ├── activity_feed.py     # Event stream
+│   ├── diagram/             # Architecture view
+│   │   └── diagram_view.py
+│   ├── cards/               # Component cards
+│   │   ├── server_card.py
+│   │   ├── database_card.py
+│   │   ├── worker_card.py
+│   │   └── ...
+│   └── modals/              # Detail popups
+│       ├── backend_modal.py
+│       ├── database_modal.py
+│       └── ...
+└── controls/            # Reusable UI components
+```
+
+## No Vendor Lock-In
+
+Overseer is just code in your project. You can:
+
+- Modify the layout
+- Add custom metrics
+- Change colors and styling
+- Remove it entirely if you prefer external monitoring
+
+No proprietary tools. No subscriptions. Just a clear view of your system, included from day one.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="CLI Interface" icon="terminal" href="/features/cli-interface">
+    System inspection from the command line
+  </Card>
+  <Card title="Illiana" icon="robot" href="/features/illiana">
+    Conversational AI operator for system queries
+  </Card>
+</CardGroup>

@@ -1,0 +1,553 @@
+---
+title: Scheduler
+description: APScheduler-based job scheduling with optional persistence
+icon: clock
+---
+
+The Scheduler component provides cron-like job scheduling for recurring tasks. Schedule database backups, report generation, cleanup jobs, or any periodic task your application needs.
+
+## What It Does
+
+The Scheduler component:
+
+- **Cron Scheduling**: Run jobs at specific times using cron expressions
+- **Interval Scheduling**: Execute jobs at regular intervals
+- **Persistence**: Optionally persist jobs to database to survive restarts
+- **Job Management**: Add, remove, and modify jobs at runtime
+- **Concurrency Control**: Prevent overlapping executions
+- **Error Handling**: Automatic retries and failure notifications
+
+## When To Use
+
+Add the Scheduler component when you need:
+
+- **Recurring Reports**: Generate daily/weekly reports automatically
+- **Data Cleanup**: Delete old records on a schedule
+- **Database Backups**: Automated backup jobs
+- **Cache Warming**: Pre-load data at regular intervals
+- **Periodic Sync**: Fetch data from external APIs
+- **Maintenance Tasks**: System health checks and optimization
+
+<Warning>
+  For one-off or user-triggered tasks, use the [Worker component](/components/worker) instead.
+</Warning>
+
+## Adding to Your Project
+
+<Tabs>
+  <Tab title="New Project">
+    Include the scheduler at project creation:
+    
+    ```bash
+    aegis init my-app --components scheduler
+    ```
+    
+    You'll be prompted to choose:
+    - **Backend**: memory (default), sqlite, or postgres
+    - **Persistence**: Whether jobs survive restarts
+  </Tab>
+
+  <Tab title="Existing Project">
+    Add the scheduler to an existing project:
+    
+    ```bash
+    aegis add scheduler --project-path ./my-app
+    ```
+    
+    The CLI will:
+    1. Add scheduler files and configuration
+    2. Update pyproject.toml with APScheduler
+    3. Add docker-compose service
+    4. Prompt for persistence options
+  </Tab>
+</Tabs>
+
+## Configuration
+
+<Tabs>
+  <Tab title="Memory (Default)">
+    Jobs stored in memory - simple but not persistent:
+    
+    ```bash
+    # .env
+    SCHEDULER_BACKEND=memory
+    SCHEDULER_FORCE_UPDATE=false
+    ```
+    
+    <Note>
+      Memory mode is perfect for development. Jobs are defined in code and reset on restart.
+    </Note>
+  </Tab>
+
+  <Tab title="SQLite">
+    Persist jobs to SQLite database:
+    
+    ```bash
+    # .env
+    SCHEDULER_BACKEND=sqlite
+    SCHEDULER_FORCE_UPDATE=false
+    DATABASE_URL=sqlite:///./data/app.db
+    ```
+    
+    Requires the Database component with SQLite.
+  </Tab>
+
+  <Tab title="PostgreSQL">
+    Persist jobs to PostgreSQL:
+    
+    ```bash
+    # .env
+    SCHEDULER_BACKEND=postgres
+    SCHEDULER_FORCE_UPDATE=false
+    DATABASE_URL=postgresql://user:pass@localhost:5432/myapp
+    ```
+    
+    Requires the Database component with PostgreSQL.
+  </Tab>
+</Tabs>
+
+### Environment Variables
+
+<ResponseField name="SCHEDULER_BACKEND" type="string" default="memory">
+  Where to store job definitions:
+  - `memory`: In-memory (lost on restart)
+  - `sqlite`: SQLite database (requires Database component)
+  - `postgres`: PostgreSQL database (requires Database component)
+</ResponseField>
+
+<ResponseField name="SCHEDULER_FORCE_UPDATE" type="boolean" default="false">
+  Force update jobs from code on startup, overwriting database-stored schedules. Useful for deployments.
+</ResponseField>
+
+## Key Files Generated
+
+<CodeGroup>
+```python app/components/scheduler/main.py
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from app.core.log import logger
+
+def create_scheduler() -> AsyncIOScheduler:
+    """Create and configure the scheduler with all jobs."""
+    
+    # Configure with persistence if enabled
+    if settings.SCHEDULER_BACKEND != "memory":
+        jobstore = SQLAlchemyJobStore(engine=engine)
+        scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
+    else:
+        scheduler = AsyncIOScheduler()
+    
+    # Add your scheduled jobs here
+    scheduler.add_job(
+        backup_database_job,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        id="database_backup",
+        name="Daily Database Backup",
+        max_instances=1,
+        coalesce=True,
+    )
+    
+    return scheduler
+
+async def run_scheduler() -> None:
+    """Main scheduler runner with lifecycle management."""
+    scheduler = create_scheduler()
+    
+    try:
+        scheduler.start()
+        logger.info("Scheduler started successfully")
+        
+        # Keep running
+        while True:
+            await asyncio.sleep(1)
+    
+    except KeyboardInterrupt:
+        logger.info("Received shutdown signal")
+    finally:
+        if scheduler.running:
+            scheduler.shutdown()
+```
+
+```python app/entrypoints/scheduler.py
+import asyncio
+from app.components.scheduler.main import run_scheduler
+from app.core.log import setup_logging
+
+async def main() -> None:
+    """Main scheduler entry point"""
+    setup_logging()
+    await run_scheduler()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+app/
+├── components/
+│   └── scheduler/
+│       ├── __init__.py
+│       └── main.py           # Scheduler configuration
+├── entrypoints/
+│   └── scheduler.py          # Scheduler entrypoint
+└── services/
+    └── scheduler/
+        ├── jobs.py           # Your scheduled job functions
+        └── models.py         # APScheduler job models (if persistent)
+```
+
+## Usage Examples
+
+### Adding Cron Jobs
+
+Schedule a job to run at specific times:
+
+```python app/components/scheduler/main.py
+from app.services.reports import generate_daily_report
+
+def create_scheduler() -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler()
+    
+    # Run every day at 8 AM
+    scheduler.add_job(
+        generate_daily_report,
+        trigger="cron",
+        hour=8,
+        minute=0,
+        id="daily_report",
+        name="Generate Daily Report",
+    )
+    
+    # Run every Monday at 9 AM
+    scheduler.add_job(
+        send_weekly_summary,
+        trigger="cron",
+        day_of_week="mon",
+        hour=9,
+        minute=0,
+        id="weekly_summary",
+    )
+    
+    # Run on the 1st of every month
+    scheduler.add_job(
+        monthly_cleanup,
+        trigger="cron",
+        day=1,
+        hour=2,
+        minute=0,
+        id="monthly_cleanup",
+    )
+    
+    return scheduler
+```
+
+### Adding Interval Jobs
+
+Run jobs at regular intervals:
+
+```python
+# Run every 30 minutes
+scheduler.add_job(
+    sync_external_data,
+    trigger="interval",
+    minutes=30,
+    id="data_sync",
+    name="Sync External Data",
+)
+
+# Run every hour
+scheduler.add_job(
+    cache_warming,
+    trigger="interval",
+    hours=1,
+    id="cache_warming",
+)
+
+# Run every 5 seconds (debugging)
+scheduler.add_job(
+    health_check,
+    trigger="interval",
+    seconds=5,
+    id="health_check",
+)
+```
+
+### Job Functions
+
+Define job functions in `app/services/scheduler/jobs.py`:
+
+```python
+from app.core.log import logger
+from app.core.db import db_session
+from app.models import OldRecord
+from datetime import datetime, timedelta
+
+async def cleanup_old_records() -> None:
+    """Delete records older than 30 days."""
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        
+        with db_session() as session:
+            deleted = session.query(OldRecord).filter(
+                OldRecord.created_at < cutoff
+            ).delete()
+            
+        logger.info(f"Deleted {deleted} old records")
+        
+    except Exception as e:
+        logger.error(f"Cleanup job failed: {e}")
+        raise
+
+async def generate_daily_report() -> dict:
+    """Generate and email daily metrics report."""
+    logger.info("Generating daily report...")
+    
+    # Your report generation logic
+    metrics = await collect_metrics()
+    report = format_report(metrics)
+    
+    # Send via email (if comms service enabled)
+    if settings.COMMS_ENABLED:
+        from app.services.comms import send_email
+        await send_email(
+            to="admin@example.com",
+            subject="Daily Report",
+            body=report,
+        )
+    
+    return {"status": "success", "records": len(metrics)}
+```
+
+### Preventing Overlaps
+
+Prevent multiple instances of the same job:
+
+```python
+scheduler.add_job(
+    long_running_task,
+    trigger="interval",
+    minutes=5,
+    id="long_task",
+    max_instances=1,      # Only one instance at a time
+    coalesce=True,        # Skip missed executions
+)
+```
+
+### Job Persistence
+
+With persistent storage, modify jobs at runtime:
+
+<Tabs>
+  <Tab title="Updating Schedules">
+    ```python
+    from apscheduler.triggers.cron import CronTrigger
+    
+    # Get the scheduler instance
+    scheduler = get_scheduler()
+    
+    # Modify existing job
+    job = scheduler.get_job("daily_report")
+    job.reschedule(CronTrigger(hour=10, minute=0))  # Change to 10 AM
+    ```
+  </Tab>
+
+  <Tab title="Adding Jobs Dynamically">
+    ```python
+    # Add a new job at runtime
+    scheduler.add_job(
+        new_task,
+        trigger="cron",
+        hour=15,
+        id="new_task",
+        replace_existing=True,
+    )
+    ```
+  </Tab>
+
+  <Tab title="Removing Jobs">
+    ```python
+    # Remove a job
+    scheduler.remove_job("old_task")
+    ```
+  </Tab>
+</Tabs>
+
+## Force Updates
+
+When deploying schedule changes:
+
+```bash
+# Update job schedules from code
+SCHEDULER_FORCE_UPDATE=true docker-compose up -d scheduler
+```
+
+This overwrites database-stored schedules with code definitions.
+
+<Note>
+  Without `SCHEDULER_FORCE_UPDATE=true`, persistent schedulers preserve runtime modifications.
+</Note>
+
+## Docker Integration
+
+The Scheduler runs as a separate service:
+
+```yaml docker-compose.yml
+services:
+  scheduler:
+    build: .
+    command: python -m app.entrypoints.scheduler
+    environment:
+      - SCHEDULER_BACKEND=${SCHEDULER_BACKEND}
+      - SCHEDULER_FORCE_UPDATE=${SCHEDULER_FORCE_UPDATE}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - postgres  # If using persistent storage
+    restart: unless-stopped
+```
+
+## Monitoring
+
+The Scheduler integrates with Overseer:
+
+- **Job Status**: See all scheduled jobs and their next run times
+- **Execution History**: View completed and failed job runs
+- **Job Details**: Inspect job configuration and triggers
+- **Health Status**: Monitor scheduler uptime
+
+Access scheduler info via:
+```bash
+curl http://localhost:8000/health/scheduler
+```
+
+## Dependencies
+
+The Scheduler component requires:
+
+<CardGroup cols={2}>
+  <Card title="APScheduler" icon="clock">
+    Advanced Python scheduler
+    ```
+    apscheduler>=3.10.4
+    ```
+  </Card>
+  
+  <Card title="Database (Optional)" icon="database">
+    Required for persistent storage
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Database Backups
+
+Schedule automatic backups (included by default when Database + Scheduler are enabled):
+
+```python
+from app.services.system.backup import backup_database_job
+
+scheduler.add_job(
+    backup_database_job,
+    trigger="cron",
+    hour=2,
+    minute=0,
+    id="database_backup",
+    name="Daily Database Backup",
+)
+```
+
+### Worker Integration
+
+Schedule jobs that enqueue worker tasks:
+
+```python
+from app.components.worker.pools import get_queue_pool
+
+async def scheduled_worker_task():
+    """Schedule a worker task to run daily."""
+    pool, queue_name = await get_queue_pool("system")
+    
+    await pool.enqueue_job(
+        "process_daily_batch",
+        _queue_name=queue_name,
+    )
+    
+    logger.info("Enqueued daily batch processing job")
+```
+
+### Error Notifications
+
+Send alerts on job failures:
+
+```python
+from apscheduler.events import EVENT_JOB_ERROR
+
+def on_job_error(event):
+    logger.error(f"Job {event.job_id} failed: {event.exception}")
+    
+    # Send notification (if comms enabled)
+    if settings.COMMS_ENABLED:
+        send_alert(f"Scheduler job failed: {event.job_id}")
+
+scheduler.add_listener(on_job_error, EVENT_JOB_ERROR)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Jobs not running">
+    Check scheduler is running:
+    ```bash
+    docker-compose ps scheduler
+    docker-compose logs scheduler
+    ```
+    
+    Verify job is registered:
+    ```python
+    scheduler.get_jobs()  # List all jobs
+    ```
+  </Accordion>
+
+  <Accordion title="Missed executions">
+    Set `coalesce=True` to skip missed runs:
+    ```python
+    scheduler.add_job(..., coalesce=True)
+    ```
+    
+    Or set `misfire_grace_time` to allow late execution:
+    ```python
+    scheduler.add_job(..., misfire_grace_time=300)  # 5 minutes
+    ```
+  </Accordion>
+
+  <Accordion title="Job running multiple times">
+    Set `max_instances=1` to prevent overlaps:
+    ```python
+    scheduler.add_job(..., max_instances=1)
+    ```
+  </Accordion>
+
+  <Accordion title="Schedule not updating">
+    If using persistent storage, set `SCHEDULER_FORCE_UPDATE=true` to override database schedules with code.
+  </Accordion>
+</AccordionGroup>
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Worker" icon="gears" href="/components/worker">
+    Combine scheduled jobs with background task processing
+  </Card>
+  
+  <Card title="Database" icon="database" href="/components/database">
+    Required for persistent job storage
+  </Card>
+  
+  <Card title="Backend" icon="server" href="/components/backend">
+    Trigger scheduled jobs from API endpoints
+  </Card>
+</CardGroup>

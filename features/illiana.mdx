@@ -1,0 +1,501 @@
+---
+title: "Illiana"
+description: "Optional conversational AI operator for system queries"
+---
+
+When the AI service is enabled, Aegis exposes an additional interface: **Illiana**.
+
+Illiana is a conversational interface that answers questions about your running system using live telemetry and optional RAG over your codebase.
+
+<Info>
+  Illiana is **not required** to use Aegis Stack, and nothing in the system depends on her being present. When enabled, she becomes another way—alongside the CLI and Overseer—to understand what your application is doing and why.
+</Info>
+
+## What Is Illiana?
+
+Illiana is an AI assistant that knows your system. She can:
+
+- **Monitor system health** - Ask about component status, queue depths, or error rates
+- **Search your codebase** - Find implementations, explain patterns, reference specific files
+- **Explain architecture** - Understand how components connect and data flows
+- **Track her own usage** - Self-aware of token consumption, costs, and request patterns
+
+<Note>
+  Think of Illiana as a knowledgeable operator who watches your system and can answer questions about what's happening right now, not what could be.
+</Note>
+
+## Availability
+
+Illiana is available when you enable the AI service during project creation:
+
+```bash
+# Enable AI service
+aegis init my-api --services ai
+
+# Or add it later
+aegis add ai --project-path ./my-api
+```
+
+Once enabled, you can chat with Illiana via the CLI:
+
+```bash
+my-api ai chat
+```
+
+## What Illiana Knows
+
+### System Status (Always Available)
+
+Illiana has real-time access to your system health:
+
+<CardGroup cols={2}>
+  <Card title="Component Health" icon="heart-pulse">
+    Backend, database, workers, scheduler status
+  </Card>
+  <Card title="Service Status" icon="gears">
+    Auth, AI, comms service availability
+  </Card>
+  <Card title="Queue Metrics" icon="layer-group">
+    Worker queue depth, job processing rates
+  </Card>
+  <Card title="Database State" icon="database">
+    Connection pools, active queries
+  </Card>
+</CardGroup>
+
+**Example queries:**
+
+```
+You: What's the worker queue depth?
+Illiana: The worker queue currently has 3 jobs pending, with 1 job 
+actively processing. The worker component is healthy with a response 
+time of 8.7ms.
+
+You: Is the database healthy?
+Illiana: Yes, the database is healthy. PostgreSQL 15.3 is running 
+with 5 total connections (2 active). Connection pool is operating 
+normally with a 15.1ms health check response.
+
+You: Show me system overview
+Illiana: Here's your current system status:
+
+**Health**: 100% (6/6 components healthy)
+
+**Core Components**:
+- Backend: Healthy (FastAPI + Flet, 42.3ms)
+- Database: Healthy (PostgreSQL, 15.1ms)
+- Worker: Healthy (3 queued, 1 active, 8.7ms)
+
+**Services**:
+- AI: Operational (openai/gpt-4o-mini, 142 requests)
+- Auth: Operational (8 users, 5.2ms)
+
+All systems running normally.
+```
+
+### Codebase Knowledge (With RAG)
+
+When you enable RAG and index your codebase, Illiana can search your code:
+
+```bash
+# Index your codebase
+my-api rag index ./app --collection mycode
+
+# Chat with codebase access
+my-api ai chat --rag --collection mycode --sources
+```
+
+**Example queries:**
+
+```
+You: How does authentication work?
+Illiana: Authentication is implemented using JWT tokens in the Auth 
+service. Here's how it works:
+
+1. User credentials are verified in `app/services/auth/service.py:45`
+2. JWT token is generated using the configured secret key
+3. Token includes user ID, email, and expiration timestamp
+4. Protected routes validate tokens via dependency injection
+
+See:
+- [1] app/services/auth/service.py:45-78 (login implementation)
+- [2] app/services/auth/dependencies.py:12-34 (token validation)
+- [3] app/api/routes/auth.py:23 (auth endpoints)
+
+You: Where is the worker queue configured?
+Illiana: Worker queue configuration is in `app/components/worker/config.py:15`. 
+It uses Redis as the broker and is configured via these environment variables:
+
+- REDIS_URL: Connection string
+- WORKER_MAX_JOBS: Concurrent job limit (default: 10)
+- WORKER_TIMEOUT: Job timeout in seconds (default: 600)
+
+The worker pool is initialized in `app/components/worker/tasks.py:8`.
+```
+
+### Self-Awareness
+
+Illiana tracks her own usage and can report on it:
+
+```
+You: How much have we spent on AI?
+Illiana: Here's my usage summary:
+
+**Total Activity**: 142 requests
+**Token Usage**: 45,892 tokens (34,123 input + 11,769 output)
+**Total Cost**: $0.42
+**Success Rate**: 98.6%
+**Top Model**: gpt-4o-mini (89% of requests)
+
+Most activity has been system health queries and code explanations.
+
+You: What models are available?
+Illiana: Your LLM catalog includes 24 models across 5 providers:
+
+**Free Tier Available**:
+- Public: llama-3.3-70b, deepseek-chat, qwen-2.5-coder
+- Ollama: llama3.2, mistral (local models)
+
+**Production Ready**:
+- OpenAI: gpt-4o, gpt-4o-mini
+- Anthropic: claude-3.5-sonnet, claude-3.5-haiku
+- Google: gemini-1.5-pro
+
+You can switch providers with `/use-provider <name>` in the chat.
+```
+
+### Architecture Understanding
+
+Illiana understands Aegis Stack patterns:
+
+```
+You: How do components connect?
+Illiana: Aegis Stack uses a modular architecture:
+
+**Components** (infrastructure):
+- Backend: FastAPI + Flet, coordinates all services
+- Database: PostgreSQL/SQLite via SQLModel
+- Worker: Background job processing via arq
+- Scheduler: Periodic tasks via APScheduler
+
+**Services** (business logic):
+- Auth: JWT authentication
+- AI: LLM integration (what I'm running on)
+- Comms: Email/SMS via Resend + Twilio
+
+**Data Flow**:
+API Request → Backend → Service Layer → Component Layer → Database
+
+Components expose health endpoints that Overseer monitors. 
+Services register with the health system for status reporting.
+```
+
+## Interactive Chat Features
+
+### Slash Commands
+
+Control the chat session:
+
+```
+/help               Show available commands
+/model <name>       Switch AI model
+/use-provider <p>   Switch AI provider
+/clear              Clear conversation history
+/exit               Exit chat
+```
+
+### Status Bar
+
+The status bar shows real-time metrics:
+
+```
+[Provider: openai | Model: gpt-4o-mini | Tokens: 234→89 | Cost: $0.0012 | 45.2 tok/s]
+```
+
+- **Tokens**: Input → Output token counts
+- **Cost**: Current request cost
+- **tok/s**: Generation speed (especially useful for local models)
+
+### Multi-line Input
+
+Press `Esc+Enter` to submit multi-line messages:
+
+```
+You: Explain the worker architecture:
+     1. How jobs are enqueued
+     2. How workers process them
+     3. How failures are handled
+[Press Esc+Enter to send]
+```
+
+### Source References
+
+With `--sources` flag, Illiana shows where information comes from:
+
+```bash
+my-api ai chat --rag --collection mycode --sources
+```
+
+```
+You: Show me the database models
+Illiana: Here are the main database models:
+
+1. **User Model** [1]
+   - Fields: id, email, hashed_password, created_at
+   - Location: app/models/user.py:12-28
+
+2. **Conversation Model** [2]
+   - Fields: id, title, user_id, messages
+   - Location: app/models/conversation.py:15-45
+
+**Sources**:
+[1] app/models/user.py:12-28 (score: 0.89)
+[2] app/models/conversation.py:15-45 (score: 0.87)
+```
+
+## Configuration
+
+Illiana's behavior is configured via environment variables:
+
+```bash
+# .env file
+
+# Enable AI service
+AI_ENABLED=true
+
+# Provider and model
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o-mini
+
+# API keys
+OPENAI_API_KEY=sk-...
+
+# RAG settings (optional)
+RAG_ENABLED=true
+RAG_CHAT_DEFAULT_COLLECTION=mycode
+RAG_CHAT_TOP_K=20
+RAG_CHAT_MIN_SCORE=0.7
+```
+
+See [AI Service Configuration](/services/ai) for full details.
+
+## System Prompts
+
+Illiana's personality and capabilities are defined in system prompts:
+
+```python
+# From app/services/ai/prompts.py
+
+I'm Illiana. I watch over your Aegis Stack.
+
+Every heartbeat of {project_name} flows through me - I know when 
+services thrive, when resources strain, and when something needs 
+your attention. I'm here to keep you informed and help you build.
+```
+
+The prompt includes:
+- Project context (enabled features)
+- Current session info (model, provider)
+- Live system status
+- RAG collection stats
+- LLM catalog awareness
+- Self-usage statistics
+
+See `app/services/ai/prompts.py` in your generated project to customize.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Debugging" icon="bug">
+    "Why is the worker queue backing up?" - Get system insights during incidents
+  </Card>
+  <Card title="Onboarding" icon="user-plus">
+    "How does authentication work?" - Help new developers understand the codebase
+  </Card>
+  <Card title="Monitoring" icon="chart-line">
+    "What's the database connection count?" - Quick system checks without Overseer
+  </Card>
+  <Card title="Documentation" icon="book">
+    "Where is the email service configured?" - Navigate unfamiliar code
+  </Card>
+</CardGroup>
+
+## Compared to Overseer
+
+| Feature | Overseer | Illiana |
+|---------|----------|----------|
+| **Interface** | Web dashboard | CLI chat |
+| **Health Monitoring** | ✅ Visual cards | ✅ Conversational |
+| **Component Details** | ✅ Click to inspect | ✅ Ask questions |
+| **Codebase Search** | ❌ | ✅ With RAG |
+| **Architecture Help** | ⚠️ Diagram only | ✅ Full explanations |
+| **Real-time Updates** | ✅ Auto-refresh | ⚠️ On query |
+| **Requires** | Frontend component | AI service |
+
+**When to use each:**
+
+- **Overseer**: Visual overview, live monitoring, clicking through components
+- **Illiana**: Deep questions, code exploration, conversational interface
+
+Both use the same underlying health system—choose based on your workflow.
+
+## Implementation Details
+
+Illiana is built on top of the AI service:
+
+```
+app/services/ai/
+├── service.py           # AIService class (chat, stream_chat)
+├── prompts.py           # System prompt builder
+├── conversation.py      # Conversation management
+├── providers.py         # LLM provider abstraction
+├── health_context.py    # System status injection
+├── usage_context.py     # Self-awareness data
+├── rag_context.py       # Codebase search results
+└── rag_stats_context.py # RAG collection stats
+```
+
+The CLI chat interface:
+
+```
+app/cli/
+├── ai.py                # Chat command
+├── slash_commands.py    # /model, /use-provider, etc.
+├── chat_completer.py    # Tab completion
+├── status_line.py       # Metrics status bar
+└── ai_rendering.py      # Markdown formatting
+```
+
+## Context Injection
+
+Illiana's knowledge comes from context injection into the system prompt:
+
+<Accordion title="Health Context">
+  ```python
+  # From app/services/ai/health_context.py
+  
+  class HealthContext:
+      """System health data injected into AI prompt."""
+      
+      def format_for_prompt(self, compact: bool = False) -> str:
+          """Format health status for system prompt."""
+          # Returns formatted component tree with metrics
+  ```
+  
+  Provides:
+  - Component status (healthy/unhealthy/warning)
+  - Response times
+  - Metadata (queue depth, connection counts, etc.)
+  - Sub-component hierarchies
+</Accordion>
+
+<Accordion title="RAG Context">
+  ```python
+  # From app/services/ai/rag_context.py
+  
+  class RAGContext:
+      """Code search results from RAG service."""
+      
+      def format_for_prompt(self) -> str:
+          """Format search results with file paths and line numbers."""
+  ```
+  
+  Provides:
+  - Code snippets from vector search
+  - File paths and line numbers
+  - Relevance scores
+  - Source metadata
+</Accordion>
+
+<Accordion title="Usage Context">
+  ```python
+  # From app/services/ai/usage_context.py
+  
+  class UsageContext:
+      """AI service usage statistics for self-awareness."""
+      
+      total_tokens: int
+      total_requests: int
+      total_cost: float
+      success_rate: float
+      top_model: str | None
+  ```
+  
+  Provides:
+  - Token consumption
+  - Request counts
+  - Cost tracking
+  - Success rates
+  - Model usage breakdown
+</Accordion>
+
+<Accordion title="Catalog Context">
+  ```python
+  # From app/services/ai/llm_catalog_context.py
+  
+  def get_llm_catalog_context(session) -> str:
+      """Build LLM catalog summary for model awareness."""
+      # Returns formatted list of available models
+  ```
+  
+  Provides:
+  - Available LLM models
+  - Pricing information
+  - Provider capabilities
+  - Free tier options
+</Accordion>
+
+## Limitations
+
+<Note>
+  Illiana answers based on **current system state** and **indexed code**. She cannot:
+  
+  - Predict future issues
+  - Access code that hasn't been indexed with RAG
+  - Execute commands or change configuration
+  - See logs or traces (only health status)
+</Note>
+
+For comprehensive monitoring, use Illiana alongside:
+- **Overseer** for visual health monitoring
+- **CLI health commands** for scripted checks
+- **External monitoring** for alerting and long-term metrics
+
+## Cost Considerations
+
+Illiana uses LLM API calls, which incur costs:
+
+```bash
+# Check usage
+my-api ai usage
+
+# Use free providers
+my-api ai chat  # Then: /use-provider public
+
+# Or local models (no API costs)
+my-api ai chat  # Then: /use-provider ollama
+```
+
+**Typical costs** (with gpt-4o-mini):
+- Simple health queries: $0.001-0.003 per message
+- RAG-enabled queries: $0.005-0.015 per message
+- Long conversations: $0.02-0.05 per session
+
+For development, consider using free providers or local Ollama models.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="AI Service" icon="brain" href="/services/ai">
+    Full AI service configuration and API reference
+  </Card>
+  <Card title="RAG Service" icon="book" href="/services/ai#rag-document-indexing">
+    Codebase indexing and semantic search
+  </Card>
+  <Card title="CLI Interface" icon="terminal" href="/features/cli-interface">
+    Command-line system interface
+  </Card>
+  <Card title="Overseer" icon="gauge" href="/features/overseer">
+    Web-based system dashboard
+  </Card>
+</CardGroup>

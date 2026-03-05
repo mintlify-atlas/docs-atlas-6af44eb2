@@ -1,0 +1,564 @@
+---
+title: Ingress
+description: Traefik reverse proxy with automatic routing and TLS support
+icon: network-wired
+---
+
+The Ingress component provides a Traefik-based reverse proxy and load balancer. Route traffic to your backend, enable TLS with Let's Encrypt, and prepare your application for production deployment.
+
+## What It Does
+
+The Ingress component:
+
+- **Reverse Proxy**: Route external traffic to internal services
+- **Automatic TLS**: Free SSL certificates from Let's Encrypt
+- **Load Balancing**: Distribute traffic across multiple backend instances
+- **Auto-Discovery**: Automatically routes to Docker services
+- **Dashboard**: Built-in Traefik dashboard for monitoring
+- **Health Checks**: Monitor upstream service health
+- **HTTP/2 Support**: Modern protocol support
+
+## When To Use
+
+Add the Ingress component when you need:
+
+- **Production Deployment**: Expose your app to the internet securely
+- **TLS/SSL**: HTTPS support with automatic certificate renewal
+- **Multiple Domains**: Route different domains to different services
+- **Load Balancing**: Scale your backend horizontally
+- **Centralized Routing**: Single entry point for all services
+- **Zero-Downtime Deploys**: Rolling updates with health checks
+
+## Adding to Your Project
+
+<Tabs>
+  <Tab title="New Project">
+    Include ingress at project creation:
+    
+    ```bash
+    aegis init my-app --components ingress
+    ```
+    
+    You'll be prompted for:
+    - **Enable TLS**: Use Let's Encrypt for HTTPS
+    - **Domain**: Your domain name (if TLS enabled)
+  </Tab>
+
+  <Tab title="Existing Project">
+    Add ingress to an existing project:
+    
+    ```bash
+    aegis add ingress --project-path ./my-app
+    ```
+    
+    The CLI will:
+    1. Add Traefik configuration files
+    2. Update docker-compose with ingress service
+    3. Configure routing for existing services
+    4. Prompt for TLS settings
+  </Tab>
+</Tabs>
+
+## Configuration
+
+<Tabs>
+  <Tab title="Basic (HTTP)">
+    Simple HTTP reverse proxy without TLS:
+    
+    ```yaml traefik/traefik.yml
+    entryPoints:
+      web:
+        address: ":80"
+    
+    providers:
+      docker:
+        endpoint: "unix:///var/run/docker.sock"
+        exposedByDefault: false
+    ```
+    
+    Access your app at: http://localhost
+  </Tab>
+
+  <Tab title="With TLS">
+    Enable HTTPS with Let's Encrypt:
+    
+    ```yaml traefik/traefik.yml
+    entryPoints:
+      web:
+        address: ":80"
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+      websecure:
+        address: ":443"
+    
+    certificatesResolvers:
+      letsencrypt:
+        acme:
+          email: your-email@example.com
+          storage: /letsencrypt/acme.json
+          httpChallenge:
+            entryPoint: web
+    ```
+    
+    <Warning>
+      TLS requires a valid domain name pointing to your server. It won't work with `localhost` or IP addresses.
+    </Warning>
+  </Tab>
+
+  <Tab title="Docker Compose">
+    Configure ingress in `docker-compose.yml`:
+    
+    ```yaml
+    services:
+      traefik:
+        image: traefik:v2.10
+        command:
+          - "--api.dashboard=true"
+          - "--providers.docker=true"
+          - "--entrypoints.web.address=:80"
+        ports:
+          - "80:80"
+          - "8080:8080"  # Dashboard
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+          - letsencrypt:/letsencrypt
+      
+      webserver:
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.backend.rule=Host(`myapp.com`)"
+          - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    
+    volumes:
+      letsencrypt:
+    ```
+  </Tab>
+</Tabs>
+
+### Environment Variables
+
+Configure through docker-compose labels:
+
+```yaml
+labels:
+  # Enable Traefik for this service
+  - "traefik.enable=true"
+  
+  # Router configuration
+  - "traefik.http.routers.myapp.rule=Host(`myapp.com`)"
+  - "traefik.http.routers.myapp.entrypoints=websecure"
+  - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
+  
+  # Service configuration
+  - "traefik.http.services.myapp.loadbalancer.server.port=8000"
+```
+
+## Key Files Generated
+
+<CodeGroup>
+```yaml traefik/traefik.yml
+# Traefik Static Configuration
+api:
+  dashboard: true
+  insecure: true  # Dashboard accessible without auth (dev mode)
+
+ping:
+  entryPoint: traefik
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+  traefik:
+    address: ":8080"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: myapp_default
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@example.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+log:
+  level: INFO
+
+accessLog: {}
+```
+
+```yaml docker-compose.yml
+services:
+  traefik:
+    image: traefik:v2.10
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      - "8080:8080"  # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - letsencrypt:/letsencrypt
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+traefik/
+└── traefik.yml         # Traefik static configuration
+
+docker-compose.yml      # Includes traefik service
+```
+
+## Usage Examples
+
+### Routing to Backend
+
+Route traffic to your FastAPI backend:
+
+```yaml docker-compose.yml
+services:
+  webserver:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.myapp.com`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api.loadbalancer.server.port=8000"
+```
+
+Access at: https://api.myapp.com
+
+### Multiple Domains
+
+Route different domains to different services:
+
+```yaml
+services:
+  webserver:
+    labels:
+      # Main app
+      - "traefik.http.routers.app.rule=Host(`myapp.com`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      
+      # API subdomain
+      - "traefik.http.routers.api.rule=Host(`api.myapp.com`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+```
+
+### Path-Based Routing
+
+Route based on URL paths:
+
+```yaml
+labels:
+  # API requests go to backend
+  - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
+  - "traefik.http.routers.api.service=backend"
+  
+  # Static files go to CDN
+  - "traefik.http.routers.static.rule=PathPrefix(`/static`)"
+  - "traefik.http.routers.static.service=cdn"
+```
+
+### Load Balancing
+
+Scale backend and auto-balance:
+
+<Steps>
+  <Step title="Scale your service">
+    ```bash
+    docker-compose up -d --scale webserver=3
+    ```
+  </Step>
+
+  <Step title="Traefik auto-discovers instances">
+    Traefik automatically discovers all backend instances and distributes traffic.
+  </Step>
+
+  <Step title="Configure health checks">
+    ```yaml
+    labels:
+      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/health/"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
+    ```
+  </Step>
+</Steps>
+
+### Custom Headers
+
+Add security headers:
+
+```yaml
+labels:
+  - "traefik.http.middlewares.security.headers.stsSeconds=31536000"
+  - "traefik.http.middlewares.security.headers.forceSTSHeader=true"
+  - "traefik.http.middlewares.security.headers.stsIncludeSubdomains=true"
+  - "traefik.http.routers.api.middlewares=security"
+```
+
+## Traefik Dashboard
+
+Access the built-in dashboard:
+
+```
+http://localhost:8080/dashboard/
+```
+
+The dashboard shows:
+- Active routers and services
+- Real-time request metrics
+- Health check status
+- TLS certificate info
+
+<Warning>
+  In production, protect the dashboard with authentication or disable it entirely.
+</Warning>
+
+## TLS/SSL Setup
+
+<Steps>
+  <Step title="Configure domain">
+    Point your domain's DNS A record to your server's IP:
+    ```
+    myapp.com -> 123.45.67.89
+    ```
+  </Step>
+
+  <Step title="Enable TLS in traefik.yml">
+    ```yaml
+    certificatesResolvers:
+      letsencrypt:
+        acme:
+          email: admin@myapp.com
+          storage: /letsencrypt/acme.json
+          httpChallenge:
+            entryPoint: web
+    ```
+  </Step>
+
+  <Step title="Configure service labels">
+    ```yaml
+    labels:
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+    ```
+  </Step>
+
+  <Step title="Start services">
+    ```bash
+    docker-compose up -d
+    ```
+    
+    Traefik will automatically request and renew certificates.
+  </Step>
+</Steps>
+
+<Note>
+  Let's Encrypt has rate limits. Use staging environment for testing:
+  ```yaml
+  acme:
+    caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+  ```
+</Note>
+
+## Docker Integration
+
+The Ingress runs as a Docker service:
+
+```yaml docker-compose.yml
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik:ro
+      - letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+volumes:
+  letsencrypt:
+```
+
+## Monitoring
+
+Ingress integrates with Overseer:
+
+- **Router Count**: Number of active routes
+- **Service Health**: Backend connectivity status
+- **Entrypoints**: Ports and protocols
+- **TLS Status**: Certificate validity
+- **Version**: Traefik version
+
+Access ingress metrics:
+```bash
+curl http://localhost:8000/health/ingress
+```
+
+## Dependencies
+
+<CardGroup cols={1}>
+  <Card title="Traefik" icon="network-wired">
+    Modern reverse proxy and load balancer
+    ```
+    traefik:v2.10
+    ```
+    
+    No Python dependencies - runs as Docker container
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Redirecting HTTP to HTTPS
+
+Force all traffic to use TLS:
+
+```yaml
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+```
+
+### Rate Limiting
+
+Protect against abuse:
+
+```yaml
+labels:
+  - "traefik.http.middlewares.ratelimit.ratelimit.average=100"
+  - "traefik.http.middlewares.ratelimit.ratelimit.burst=200"
+  - "traefik.http.routers.api.middlewares=ratelimit"
+```
+
+### Basic Auth
+
+Protect routes with authentication:
+
+```bash
+# Generate password hash
+htpasswd -nb admin secretpassword
+```
+
+```yaml
+labels:
+  - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$..."
+  - "traefik.http.routers.dashboard.middlewares=auth"
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="502 Bad Gateway">
+    Backend service is not reachable. Check:
+    1. Backend service is running: `docker-compose ps`
+    2. Labels are correct in docker-compose.yml
+    3. Port in labels matches backend port
+  </Accordion>
+
+  <Accordion title="Certificate errors">
+    Let's Encrypt challenges failing:
+    1. Verify domain DNS points to your server
+    2. Check port 80 is accessible from internet
+    3. Review Traefik logs: `docker-compose logs traefik`
+    4. Check rate limits: https://letsencrypt.org/docs/rate-limits/
+  </Accordion>
+
+  <Accordion title="Dashboard not accessible">
+    Enable dashboard in traefik.yml:
+    ```yaml
+    api:
+      dashboard: true
+      insecure: true
+    ```
+  </Accordion>
+
+  <Accordion title="Routes not working">
+    Verify service has correct labels:
+    ```bash
+    docker inspect <container-id> | grep traefik
+    ```
+    
+    Check Traefik dashboard for registered routers.
+  </Accordion>
+</AccordionGroup>
+
+## Production Checklist
+
+<Steps>
+  <Step title="Secure dashboard">
+    Add authentication or disable public access:
+    ```yaml
+    api:
+      dashboard: false  # Or add basicAuth middleware
+    ```
+  </Step>
+
+  <Step title="Enable access logs">
+    ```yaml
+    accessLog:
+      filePath: "/var/log/traefik/access.log"
+      format: json
+    ```
+  </Step>
+
+  <Step title="Set up monitoring">
+    Enable Prometheus metrics:
+    ```yaml
+    metrics:
+      prometheus:
+        entryPoint: traefik
+    ```
+  </Step>
+
+  <Step title="Configure rate limiting">
+    Protect against abuse (see Common Patterns above)
+  </Step>
+
+  <Step title="Test TLS renewal">
+    Verify certificates auto-renew before expiry
+  </Step>
+</Steps>
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server" href="/components/backend">
+    Route traffic to your FastAPI backend
+  </Card>
+  
+  <Card title="Frontend" icon="desktop" href="/components/frontend">
+    Expose the Overseer dashboard publicly
+  </Card>
+</CardGroup>

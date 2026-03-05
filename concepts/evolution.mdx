@@ -1,0 +1,688 @@
+---
+title: 'Evolution'
+description: 'How to add, remove, and update components as your needs change'
+---
+
+## The Evolution Philosophy
+
+Most starter templates lock you into decisions made at initialization. Aegis Stack is different: **your choices aren't permanent**.
+
+Start with what you need today. Add components when requirements change. Remove what you outgrow. Stay current with template improvements.
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with minimal components, ship faster
+  </Card>
+  <Card title="Grow Organically" icon="chart-line">
+    Add components as needs emerge
+  </Card>
+  <Card title="Stay Lean" icon="minimize">
+    Remove components you no longer need
+  </Card>
+  <Card title="Stay Current" icon="arrows-rotate">
+    Update to latest template versions
+  </Card>
+</CardGroup>
+
+## Comparison: Aegis vs Traditional Starters
+
+| Feature | Traditional Starters | Aegis Stack |
+|---------|---------------------|-------------|
+| **Add Later?** | ❌ Locked at init | ✅ One command |
+| **Remove Later?** | ❌ Manual deletion | ✅ One command |
+| **Git Conflicts?** | ⚠️ High risk | ✅ Auto-handled |
+| **Template Updates?** | ❌ Manual merge | ✅ Git-aware merge |
+| **Version Control?** | ❌ Fork & modify | ✅ Track upstream |
+
+From README.md:105-109
+
+## Lifecycle Commands
+
+Aegis Stack provides three commands for managing your project over time:
+
+### `aegis add` - Add Components
+
+Add infrastructure components to an existing project.
+
+```bash
+# Add single component
+aegis add scheduler
+
+# Add multiple components
+aegis add worker,database
+
+# Add with configuration (scheduler backend)
+aegis add scheduler[sqlite]
+
+# Interactive selection
+aegis add --interactive
+
+# Add to specific project
+aegis add worker --project-path ../my-api
+```
+
+From `aegis/commands/add.py:27-350`
+
+<Info>
+**Safe Operation**: Adding components never overwrites existing files. New files are added and configuration is updated in `.copier-answers.yml`.
+</Info>
+
+<Accordion title="How aegis add Works">
+<Steps>
+  <Step title="Validate project">
+    Checks that the target directory is a Copier-generated Aegis Stack project (`aegis/commands/add.py:87-92`)
+  </Step>
+  <Step title="Check version compatibility">
+    Ensures CLI version matches project template version (`aegis/commands/add.py:92`)
+  </Step>
+  <Step title="Parse components">
+    Handles comma-separated lists and bracket syntax like `scheduler[sqlite]` (`aegis/commands/add.py:133-153`)
+  </Step>
+  <Step title="Resolve dependencies">
+    Auto-adds required components (e.g., redis for worker) (`aegis/commands/add.py:166-184`)
+  </Step>
+  <Step title="Check existing components">
+    Filters out components already enabled (`aegis/commands/add.py:194-213`)
+  </Step>
+  <Step title="Update configuration">
+    Updates `.copier-answers.yml` with new component selections (`aegis/commands/add.py:264-281`)
+  </Step>
+  <Step title="Add component files">
+    Uses `ManualUpdater` to render and add component-specific files (`aegis/commands/add.py:286-332`)
+  </Step>
+  <Step title="Display results">
+    Shows project map with newly added components highlighted (`aegis/commands/add.py:336-345`)
+  </Step>
+</Steps>
+</Accordion>
+
+### `aegis remove` - Remove Components
+
+Remove infrastructure components from an existing project.
+
+```bash
+# Remove single component
+aegis remove scheduler
+
+# Remove multiple components
+aegis remove worker,redis
+
+# Interactive selection
+aegis remove --interactive
+
+# Remove from specific project
+aegis remove scheduler --project-path ../my-api
+```
+
+From `aegis/commands/remove.py:23-237`
+
+<Warning>
+**Destructive Operation**: Removing components **deletes files** and cannot be easily undone. Always commit your changes to git before removing components.
+</Warning>
+
+<Accordion title="How aegis remove Works">
+<Steps>
+  <Step title="Validate project">
+    Checks that the target directory is a Copier-generated Aegis Stack project (`aegis/commands/remove.py:72-76`)
+  </Step>
+  <Step title="Check version compatibility">
+    Ensures CLI version matches project template version (`aegis/commands/remove.py:77`)
+  </Step>
+  <Step title="Validate components">
+    Ensures requested components exist and are not core components (`aegis/commands/remove.py:117-127`)
+  </Step>
+  <Step title="Check component status">
+    Verifies components are currently enabled (`aegis/commands/remove.py:136-158`)
+  </Step>
+  <Step title="Handle dependent components">
+    Auto-removes redis if worker is removed and redis has no other use (`aegis/commands/remove.py:160-174`)
+  </Step>
+  <Step title="Confirm operation">
+    Displays warning and requires user confirmation (`aegis/commands/remove.py:196-205`)
+  </Step>
+  <Step title="Remove component files">
+    Uses `ManualUpdater` to delete component-specific files (`aegis/commands/remove.py:209-231`)
+  </Step>
+  <Step title="Update configuration">
+    Updates `.copier-answers.yml` to reflect removed components
+  </Step>
+</Steps>
+</Accordion>
+
+### `aegis update` - Update Template Version
+
+Update your project to a newer template version while preserving customizations.
+
+```bash
+# Update to latest (CLI version)
+aegis update
+
+# Update to specific version
+aegis update --to-version 0.6.0
+
+# Preview changes without applying
+aegis update --dry-run
+
+# Update specific project
+aegis update --project-path ../my-api
+
+# Use custom template
+aegis update --template-path ~/workspace/aegis-stack
+```
+
+From `aegis/commands/update.py:87-495`
+
+<Info>
+**Git Required**: Update requires a clean git working tree. Commit or stash changes before running `aegis update`.
+</Info>
+
+<Accordion title="How aegis update Works">
+<Steps>
+  <Step title="Validate git status">
+    Ensures working tree is clean - Copier requires this for safe merging (`aegis/commands/update.py:164-174`)
+  </Step>
+  <Step title="Get version information">
+    Determines current template version and target version (`aegis/commands/update.py:179-230`)
+  </Step>
+  <Step title="Display changelog">
+    Shows git commits between current and target versions (`aegis/commands/update.py:264-270`)
+  </Step>
+  <Step title="Create backup point">
+    Creates git tag for rollback if update fails (`aegis/commands/update.py:292-298`)
+  </Step>
+  <Step title="Run Copier update">
+    Uses Copier's git-aware merge to apply template changes (`aegis/commands/update.py:362-373`)
+  </Step>
+  <Step title="Clean up nested directories">
+    Handles new files created in nested `{{ project_slug }}/` directory (`aegis/commands/update.py:376-393`)
+  </Step>
+  <Step title="Sync template changes">
+    3-way merge preserves user customizations while applying template updates (`aegis/commands/update.py:395-415`)
+  </Step>
+  <Step title="Run post-generation tasks">
+    Runs uv sync, migrations, etc. (`aegis/commands/update.py:417-441`)
+  </Step>
+  <Step title="Check for conflicts">
+    Analyzes and reports any merge conflicts (`aegis/commands/update.py:460-465`)
+  </Step>
+  <Step title="Clean up backup">
+    Removes backup tag on success, keeps it on failure for rollback (`aegis/commands/update.py:468-487`)
+  </Step>
+</Steps>
+</Accordion>
+
+## Evolution Workflow
+
+A typical evolution workflow across project lifetime:
+
+### Week 1: Ship MVP
+
+```bash
+# Start minimal
+aegis init my-api
+cd my-api
+uv sync
+cp .env.example .env
+make serve
+```
+
+Components: `backend`, `frontend` (core only)
+
+### Week 3: Add Scheduled Reports
+
+```bash
+# Business needs periodic reports
+aegis add scheduler
+make serve
+```
+
+Components: `backend`, `frontend`, `scheduler`
+
+### Month 2: Need Async Workers
+
+```bash
+# Long-running tasks blocking API
+aegis add worker
+make serve
+```
+
+Components: `backend`, `frontend`, `scheduler`, `worker`, `redis` (auto-added)
+
+### Month 6: Scheduler Not Needed
+
+```bash
+# Moved scheduled tasks to worker
+aegis remove scheduler
+make serve
+```
+
+Components: `backend`, `frontend`, `worker`, `redis`
+
+### Month 12: Stay Current
+
+```bash
+# Update to latest template improvements
+aegis update
+make check
+git commit -m "Update Aegis Stack template to v0.7.0"
+```
+
+From README.md:88-103
+
+## Version Compatibility
+
+### CLI and Template Versions
+
+Aegis Stack maintains version compatibility between CLI and templates:
+
+```bash
+# Check versions
+aegis --version  # CLI version
+cat .copier-answers.yml | grep aegis_version  # Template version
+```
+
+From `aegis/core/version_compatibility.py`:
+
+```python
+def validate_version_compatibility(
+    project_path: Path,
+    command_name: str,
+    force: bool = False
+) -> None:
+    """Validate CLI version matches project template version."""
+    cli_version = get_cli_version()
+    project_version = get_project_template_version(project_path)
+    
+    if cli_version != project_version and not force:
+        # Show warning, suggest update
+        pass
+```
+
+### Version Mismatch Handling
+
+When CLI and template versions don't match:
+
+<Steps>
+  <Step title="Warning displayed">
+    ```bash
+    Version Mismatch Warning:
+       CLI Version:      0.6.0
+       Template Version: 0.5.0
+    ```
+  </Step>
+  <Step title="Suggest update">
+    ```bash
+    Recommendation: Update your project to match CLI version
+       Run: aegis update
+    ```
+  </Step>
+  <Step title="Allow force">
+    ```bash
+    # Continue anyway
+    aegis add scheduler --force
+    ```
+  </Step>
+</Steps>
+
+## Git-Aware Merging
+
+Aegis Stack uses Copier's git integration for safe updates:
+
+### How Git-Aware Updates Work
+
+<Accordion title="Template as Git Repository">
+The Aegis Stack template is a git repository. When you initialize a project, Copier records:
+
+```yaml
+# .copier-answers.yml
+_src_path: gh:lbedner/aegis-stack
+_commit: abc123def456  # Git commit used for generation
+```
+
+This enables Copier to:
+1. Know exactly which template version generated your project
+2. Fetch changes between template versions
+3. Perform 3-way merges (base, template changes, your changes)
+</Accordion>
+
+<Accordion title="3-Way Merge Process">
+When you run `aegis update`, Copier:
+
+1. **Identifies base**: Original template at `_commit`
+2. **Fetches changes**: New template at target version
+3. **Detects customizations**: Your modifications to generated code
+4. **Merges intelligently**:
+   - Template changes in untouched files → Applied cleanly
+   - Your changes in unchanged template areas → Preserved
+   - Both changed same area → Conflict (`.rej` file created)
+
+From `aegis/core/template_cleanup.py:sync_template_changes()`
+</Accordion>
+
+<Accordion title="Conflict Resolution">
+When conflicts occur:
+
+```bash
+# Update creates .rej files
+aegis update
+   2 file(s) have merge conflicts (search for <<<<<<< to resolve):
+      - app/main.py
+      - docker-compose.yml
+```
+
+Resolve conflicts manually:
+
+```python
+# app/main.py
+<<<<<<< YOUR CHANGES
+@app.get("/custom")
+def my_endpoint():
+    return {"custom": True}
+=======
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+>>>>>>> TEMPLATE CHANGES
+```
+
+See `aegis/commands/update.py:460-465` for conflict analysis.
+</Accordion>
+
+### Backup and Rollback
+
+Safety mechanisms during updates:
+
+**Automatic Backup** (`aegis/commands/update.py:292-298`):
+```bash
+aegis update
+Creating backup point...
+   Backup created: aegis-backup-20260305-143022
+```
+
+**Rollback on Failure** (`aegis/commands/update.py:476-487`):
+```bash
+Update failed: Template version not found
+
+Rollback to previous state? [Y/n]: y
+   Rolled back to aegis-backup-20260305-143022
+```
+
+**Manual Rollback**:
+```bash
+# If you decline automatic rollback
+git reset --hard aegis-backup-20260305-143022
+```
+
+## Component File Management
+
+Understanding what happens to files:
+
+### Adding Components
+
+**Files Added** (`aegis/core/manual_updater.py`):
+- Component-specific template files (from `ComponentSpec.template_files`)
+- Shared file updates (e.g., `docker-compose.yml`, `pyproject.toml`)
+
+**Files Preserved**:
+- All existing files (never overwritten)
+- User customizations in shared files
+
+**Configuration Updated**:
+```yaml
+# .copier-answers.yml
+include_scheduler: true  # Added
+```
+
+### Removing Components
+
+**Files Deleted**:
+- Component-specific files only
+- Example: `app/components/scheduler.py`, `app/entrypoints/scheduler.py`
+
+**Files Updated**:
+- `docker-compose.yml` - Remove component services
+- `pyproject.toml` - Remove component dependencies
+
+**Files Preserved**:
+- Database files (e.g., `data/scheduler.db` with scheduler persistence)
+- User files not in component template
+
+From `aegis/commands/remove.py:176-186`:
+```python
+if scheduler_backend == StorageBackends.SQLITE:
+    typer.echo("Your scheduler uses SQLite for job persistence.")
+    typer.echo("The database file at data/scheduler.db will remain.")
+    typer.echo("To remove all data: Also remove the database component")
+```
+
+### Updating Templates
+
+**Files Modified**:
+- Only files changed in template between versions
+- User customizations preserved via 3-way merge
+
+**Files Created**:
+- New files added in template version
+- New components if enabled in `.copier-answers.yml`
+
+**Files Deleted**:
+- Files removed in template version
+- Only if not customized by user
+
+## The `.copier-answers.yml` File
+
+The answer file is the key to evolution:
+
+```yaml
+# .copier-answers.yml
+_commit: abc123def456
+_src_path: gh:lbedner/aegis-stack
+aegis_version: 0.6.0
+project_name: My API
+project_slug: my-api
+
+# Component selections
+include_scheduler: true
+include_worker: true
+include_database: true
+include_redis: true
+
+# Component configuration
+scheduler_backend: sqlite
+database_engine: sqlite
+
+# Service selections
+include_auth: false
+include_ai: false
+include_comms: false
+```
+
+<Warning>
+**Never delete `.copier-answers.yml`** - it's required for `add`, `remove`, and `update` commands to work correctly.
+</Warning>
+
+From `copier.yml:17`:
+```yaml
+_answers_file: .copier-answers.yml
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Minimal" icon="seedling">
+    Begin with core components only. Add infrastructure as needs emerge, not "just in case".
+  </Card>
+  <Card title="Commit Before Evolution" icon="code-commit">
+    Always commit changes to git before `add`, `remove`, or `update`. This enables safe rollback.
+  </Card>
+  <Card title="Test After Changes" icon="vial">
+    Run `make check` after evolution operations to ensure everything still works.
+  </Card>
+  <Card title="Review Diffs" icon="code-compare">
+    After `aegis update`, review changes with `git diff` before committing.
+  </Card>
+  <Card title="Keep Up to Date" icon="clock-rotate-left">
+    Regularly run `aegis update` to benefit from template improvements and bug fixes.
+  </Card>
+  <Card title="Use Interactive Mode" icon="hand-pointer">
+    For complex operations, use `--interactive` to carefully select components.
+  </Card>
+</CardGroup>
+
+## Common Evolution Patterns
+
+### Pattern: Progressive Enhancement
+
+```bash
+# Day 1: Ship MVP
+aegis init basic-api
+
+# Week 2: Add user accounts
+aegis add database
+# Enable auth service via copier update
+
+# Month 1: Add background jobs
+aegis add worker
+
+# Month 3: Add scheduled tasks
+aegis add scheduler
+
+# Month 6: Add observability
+aegis add observability
+```
+
+### Pattern: Prototype to Production
+
+```bash
+# Prototype: Everything in-memory
+aegis init prototype
+# No database, no persistence
+
+# Production: Add persistence
+aegis add database
+aegis add scheduler[sqlite]  # Persistent jobs
+# Enable auth service
+
+# Scale: Add workers
+aegis add worker
+aegis add ingress  # Load balancer
+```
+
+### Pattern: Simplification
+
+```bash
+# Started with everything
+aegis init full-stack --components scheduler,worker,database
+
+# Realized don't need scheduler
+aegis remove scheduler
+
+# Realized don't need workers
+aegis remove worker
+# Auto-removes redis (no longer needed)
+
+# Clean, focused stack
+# Components: backend, frontend, database
+```
+
+## Why Aegis is Different
+
+From README.md:86-112:
+
+> **Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
+
+Most starters lock you in at initialization. Aegis Stack provides:
+
+1. **One-command evolution**: `aegis add`, `aegis remove`, `aegis update`
+2. **Git-aware merging**: Safe template updates with conflict detection
+3. **Automatic dependency management**: Components auto-add/remove dependencies
+4. **Rollback capabilities**: Backup tags enable safe experimentation
+5. **No vendor lock-in**: Generated projects work without CLI if needed
+
+## Troubleshooting
+
+<Accordion title="Version mismatch warnings">
+**Problem**: CLI version doesn't match template version
+
+**Solution**:
+```bash
+# Update project to match CLI
+aegis update
+
+# Or force operation (not recommended)
+aegis add scheduler --force
+```
+</Accordion>
+
+<Accordion title="Merge conflicts during update">
+**Problem**: Update creates `.rej` files with conflicts
+
+**Solution**:
+```bash
+# Find conflicts
+grep -r "<<<<<<<" .
+
+# Resolve manually
+vim app/main.py  # Edit conflicted file
+
+# Clean up .rej files
+find . -name "*.rej" -delete
+
+# Test and commit
+make check
+git add .
+git commit -m "Resolve merge conflicts from template update"
+```
+</Accordion>
+
+<Accordion title="Git tree not clean">
+**Problem**: `aegis update` requires clean git tree
+
+**Solution**:
+```bash
+# Commit changes
+git add .
+git commit -m "WIP: Save before template update"
+
+# Or stash changes
+git stash
+
+# Now run update
+aegis update
+
+# Restore stash if used
+git stash pop
+```
+</Accordion>
+
+<Accordion title="Component files not removed">
+**Problem**: `aegis remove` didn't delete all files
+
+**Solution**:
+Component removal only deletes files in `ComponentSpec.template_files`. Other files (like data files) are preserved.
+
+```bash
+# Manual cleanup if needed
+rm -rf data/scheduler.db
+
+# Review what was removed
+git status
+```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Complete command reference for add, remove, update
+  </Card>
+  <Card title="Components" icon="cube" href="/concepts/components">
+    Learn what each component provides
+  </Card>
+  <Card title="Services" icon="briefcase" href="/concepts/services">
+    Explore available business logic services
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/overview">
+    Back to architecture overview
+  </Card>
+</CardGroup>

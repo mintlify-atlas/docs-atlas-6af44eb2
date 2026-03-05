@@ -1,0 +1,530 @@
+---
+title: 'Services'
+description: 'Business logic services built on Aegis Stack infrastructure components'
+---
+
+## What Are Services?
+
+Services are **business logic features** that deliver value to your users. Unlike [components](/concepts/components) which focus on infrastructure, services implement domain-specific functionality like authentication, AI interactions, and communications.
+
+Services are defined in `aegis/core/services.py:46-95` and build on top of infrastructure components.
+
+<Note>
+Services focus on **what** your application does (business logic), while components focus on **how** it runs (infrastructure).
+</Note>
+
+## Service Types
+
+Services are classified by their business purpose:
+
+```python
+class ServiceType(Enum):
+    AUTH = "auth"                    # Authentication and authorization
+    PAYMENT = "payment"              # Payment processing
+    AI = "ai"                        # AI and ML integrations
+    NOTIFICATION = "notification"    # Email, SMS, push notifications
+    ANALYTICS = "analytics"          # Usage analytics and metrics
+    STORAGE = "storage"              # File storage and CDN
+```
+
+From `aegis/core/services.py:12-21`
+
+## Available Services
+
+### Authentication (Auth)
+
+<Card title="Auth Service" icon="lock">
+  **Type**: `ServiceType.AUTH`
+  
+  **Description**: User authentication and authorization with JWT tokens
+  
+  **Use When**: You need user accounts, login/logout, and protected endpoints
+  
+  **Required Components**:
+  - `backend` - For API endpoints
+  - `database` - For user storage
+  
+  **Python Packages**:
+  - `python-jose[cryptography]==3.3.0` - JWT handling
+  - `passlib[bcrypt]==1.7.4` - Password hashing
+  - `python-multipart==0.0.9` - Form data parsing
+  
+  **Template Files**:
+  - `app/components/backend/api/auth/` - Auth endpoints
+  - `app/models/user.py` - User model
+  - `app/services/auth/` - Auth service logic
+  - `app/core/security.py` - Security utilities
+</Card>
+
+<Accordion title="Auth Service Implementation">
+The auth service provides complete JWT-based authentication:
+
+**User Model** (`app/models/user.py`):
+```python
+from sqlmodel import SQLModel, Field
+
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    is_active: bool = True
+```
+
+**API Endpoints** (`app/components/backend/api/auth/`):
+- `POST /auth/register` - User registration
+- `POST /auth/login` - JWT token generation
+- `GET /auth/me` - Get current user
+
+**Usage in routes**:
+```python
+from app.core.security import get_current_user
+from fastapi import Depends
+
+@router.get("/protected")
+async def protected_route(user: User = Depends(get_current_user)):
+    return {"user": user.email}
+```
+
+Enable in your project:
+```bash
+aegis init my-app --services auth
+# Or add later:
+aegis add database  # Required dependency
+# Then enable auth via aegis init with auth service
+```
+</Accordion>
+
+<Info>
+The auth service automatically creates database migrations for the user table. Run `make migrate` after enabling auth.
+</Info>
+
+### AI Service
+
+<Card title="AI Service" icon="robot">
+  **Type**: `ServiceType.AI`
+  
+  **Description**: AI chatbot service with multi-framework support
+  
+  **Use When**: You need conversational AI, RAG, or LLM integrations
+  
+  **Required Components**:
+  - `backend` - For API endpoints
+  
+  **Python Packages**:
+  - Framework-specific (PydanticAI or LangChain)
+  - Provider-specific (OpenAI, Anthropic, etc.)
+  
+  **Template Files**:
+  - `app/services/ai/` - AI service implementation
+  - `app/cli/ai.py` - CLI commands for AI
+  - `app/components/backend/api/ai/` - AI API endpoints
+</Card>
+
+<Accordion title="AI Framework Options">
+Choose your AI framework during initialization (`copier.yml:167-174`):
+
+```yaml
+ai_framework:
+  type: str
+  choices:
+    - "pydantic-ai"  # Recommended: Type-safe AI with Pydantic
+    - "langchain"    # Comprehensive LLM framework
+```
+
+**PydanticAI** (default):
+- Type-safe AI with Pydantic validation
+- Lightweight and modern
+- Native async support
+
+**LangChain**:
+- Extensive ecosystem
+- Many pre-built integrations
+- More complex but feature-rich
+</Accordion>
+
+<Accordion title="AI Provider Support">
+Supports multiple AI providers (`copier.yml:176-180`):
+
+```yaml
+ai_providers:
+  type: str
+  help: "AI providers to support (comma-separated)"
+  default: "openai"
+```
+
+**Supported providers**:
+- OpenAI (GPT-4, GPT-3.5)
+- Anthropic (Claude)
+- Google (Gemini)
+- Ollama (local models)
+- And more via framework plugins
+</Accordion>
+
+<Accordion title="AI Storage Backends">
+Persist AI conversations with optional backends (`copier.yml:182-196`):
+
+```yaml
+ai_backend:
+  type: str
+  choices:
+    - "memory"    # In-memory (no persistence)
+    - "sqlite"    # SQLite database
+    - "postgres"  # PostgreSQL database
+```
+
+When using persistent storage:
+```bash
+aegis init my-app --services ai
+# Select sqlite or postgres as ai_backend
+# Database migrations will be auto-generated
+```
+</Accordion>
+
+<Accordion title="Advanced AI Features">
+**RAG (Retrieval-Augmented Generation)** (`copier.yml:198-202`):
+```yaml
+ai_rag:
+  type: bool
+  help: "Enable RAG for document indexing?"
+```
+
+Enables:
+- Document embedding and indexing
+- Vector search over your codebase
+- Context-aware responses
+
+**Voice Capabilities** (`copier.yml:204-208`):
+```yaml
+ai_voice:
+  type: bool
+  help: "Enable voice capabilities (TTS and STT)?"
+```
+
+Enables:
+- Text-to-Speech (TTS)
+- Speech-to-Text (STT)
+- Voice-based interaction with AI
+</Accordion>
+
+### Communications (Comms)
+
+<Card title="Comms Service" icon="envelope">
+  **Type**: `ServiceType.NOTIFICATION`
+  
+  **Description**: Email (Resend) and SMS/Voice (Twilio) communications
+  
+  **Use When**: You need to send emails, SMS, or make voice calls
+  
+  **Required Components**:
+  - `backend` - For API endpoints
+  
+  **Python Packages**:
+  - `resend>=2.4.0` - Email provider
+  - `twilio>=9.3.7` - SMS/Voice provider
+  
+  **Template Files**:
+  - `app/services/comms/` - Communication service
+  - `app/cli/comms.py` - CLI commands for testing
+  - `app/components/backend/api/comms/` - Comms API endpoints
+</Card>
+
+<Accordion title="Email with Resend">
+**Why Resend?**
+- Modern, developer-friendly API
+- Excellent deliverability
+- Generous free tier
+- Built by developers for developers
+
+**Email usage**:
+```python
+from app.services.comms import send_email
+
+await send_email(
+    to="user@example.com",
+    subject="Welcome to My App",
+    html="<h1>Welcome!</h1>",
+)
+```
+
+**Template support**:
+```python
+await send_email_template(
+    to="user@example.com",
+    template="welcome",
+    context={"name": "Alice"},
+)
+```
+</Accordion>
+
+<Accordion title="SMS and Voice with Twilio">
+**SMS usage**:
+```python
+from app.services.comms import send_sms
+
+await send_sms(
+    to="+1234567890",
+    body="Your verification code is 123456",
+)
+```
+
+**Voice calls**:
+```python
+from app.services.comms import make_call
+
+await make_call(
+    to="+1234567890",
+    twiml="<Response><Say>Hello from Aegis Stack</Say></Response>",
+)
+```
+</Accordion>
+
+<Accordion title="CLI Testing Commands">
+Test your communications setup via CLI:
+
+```bash
+# Test email
+python -m app.cli.comms send-email \
+  --to user@example.com \
+  --subject "Test" \
+  --body "Test email"
+
+# Test SMS
+python -m app.cli.comms send-sms \
+  --to +1234567890 \
+  --body "Test SMS"
+```
+</Accordion>
+
+## Service Dependencies
+
+Services declare required components and other services:
+
+### Required Components
+
+From `aegis/core/services.py:24-44`:
+
+```python
+@dataclass
+class ServiceSpec:
+    name: str
+    type: ServiceType
+    description: str
+    required_components: list[str]  # Components needed by this service
+    # ...
+```
+
+Example from auth service (`aegis/core/services.py:48-64`):
+
+```python
+"auth": ServiceSpec(
+    name="auth",
+    type=ServiceType.AUTH,
+    description="User authentication and authorization with JWT tokens",
+    required_components=["backend", "database"],  # Must have both
+    # ...
+)
+```
+
+### Service Validation
+
+The system validates service dependencies during initialization (`aegis/core/services.py:132-170`):
+
+```python
+def validate_service_dependencies(
+    selected_services: list[str],
+    available_components: list[str]
+) -> list[str]:
+    """Validate that all required components are available."""
+    errors = []
+    
+    for service_name in selected_services:
+        service = SERVICES[service_name]
+        
+        # Check required components
+        for required_comp in service.required_components:
+            if required_comp not in available_components:
+                errors.append(
+                    f"Service '{service_name}' requires component '{required_comp}'"
+                )
+    
+    return errors
+```
+
+## Services vs Components
+
+Understanding the distinction:
+
+| Aspect | Components | Services |
+|--------|-----------|----------|
+| **Focus** | Infrastructure | Business Logic |
+| **Purpose** | Technical capabilities | User-facing features |
+| **Examples** | Database, Workers, Redis | Auth, AI, Communications |
+| **Dependencies** | Other components | Components + other services |
+| **Lifecycle** | Can be added/removed | Configured at init time |
+| **Location** | `app/components/` | `app/services/` |
+
+<Info>
+Components provide the **foundation**, services deliver the **value**.
+</Info>
+
+## Service Configuration
+
+Services are configured during project initialization:
+
+```bash
+# Single service
+aegis init my-app --services auth
+
+# Multiple services
+aegis init my-app --services auth,ai,comms
+
+# Interactive selection
+aegis init my-app
+# Then select services during prompts
+```
+
+Configuration is stored in `copier.yml:156-224`:
+
+```yaml
+# Service selection
+include_auth: bool
+include_ai: bool
+include_comms: bool
+
+# Service-specific configuration
+ai_framework: "pydantic-ai" | "langchain"
+ai_providers: str  # Comma-separated
+ai_backend: "memory" | "sqlite" | "postgres"
+ai_rag: bool
+ai_voice: bool
+```
+
+## Service Registry
+
+All services are registered in `SERVICES` dict (`aegis/core/services.py:46-95`):
+
+```python
+SERVICES: dict[str, ServiceSpec] = {
+    "auth": ServiceSpec(...),
+    "ai": ServiceSpec(...),
+    "comms": ServiceSpec(...),
+}
+```
+
+Access service information:
+
+```python
+from aegis.core.services import get_service, list_available_services
+
+# Get specific service
+auth = get_service("auth")
+print(auth.description)  # "User authentication..."
+print(auth.required_components)  # ['backend', 'database']
+
+# List all services
+all_services = list_available_services()
+print(all_services)  # ['auth', 'ai', 'comms']
+```
+
+## Adding Services After Init
+
+<Warning>
+Currently, services must be selected during `aegis init`. Unlike components, there is no `aegis add service` command yet.
+</Warning>
+
+To add a service to an existing project:
+
+<Steps>
+  <Step title="Ensure required components are present">
+    ```bash
+    # For auth: need database
+    aegis add database
+    ```
+  </Step>
+  <Step title="Run aegis update to regenerate project">
+    ```bash
+    # This will prompt for service selection
+    aegis update
+    ```
+  </Step>
+  <Step title="Manually edit .copier-answers.yml">
+    ```yaml
+    # Add service configuration
+    include_auth: true
+    ```
+  </Step>
+  <Step title="Re-run copier update">
+    ```bash
+    copier update
+    ```
+  </Step>
+</Steps>
+
+<Info>
+Service lifecycle management (add/remove commands) is planned for a future release.
+</Info>
+
+## Service Specification Reference
+
+Full `ServiceSpec` definition from `aegis/core/services.py:24-44`:
+
+```python
+@dataclass
+class ServiceSpec:
+    """Specification for a single service."""
+    
+    name: str                                      # Service identifier
+    type: ServiceType                              # Business classification
+    description: str                               # Human-readable description
+    required_components: list[str] = []           # Components this needs
+    recommended_components: list[str] = []        # Soft dependencies
+    required_services: list[str] = []             # Other services needed
+    conflicts: list[str] = []                     # Incompatible services
+    pyproject_deps: list[str] = []                # Python packages
+    template_files: list[str] = []                # Template paths to include
+```
+
+## Environment Variables
+
+Services typically require API keys and configuration via environment variables:
+
+**Auth Service**:
+```bash
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+**AI Service**:
+```bash
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=...
+AI_MODEL=gpt-4
+```
+
+**Comms Service**:
+```bash
+RESEND_API_KEY=re_...
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+1234567890
+```
+
+See `.env.example` in your generated project for the complete list.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="cube" href="/concepts/components">
+    Learn about infrastructure components that services build upon
+  </Card>
+  <Card title="Evolution" icon="rotate" href="/concepts/evolution">
+    Understand how to evolve your stack over time
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Complete command reference
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/overview">
+    Back to architecture overview
+  </Card>
+</CardGroup>

@@ -1,0 +1,138 @@
+---
+title: "Philosophy"
+description: "Why Aegis Stack exists and the principles behind modular evolution"
+---
+
+## The Problem We're Solving
+
+You need to ship reliable software, but management only gave you 2 weeks.
+
+No time for health checks, proper testing, or clean architecture. Just enough time for duct tape and hope.
+
+**What if you could go from idea to working prototype in the time it takes to grab coffee?**
+
+Most starters lock you in at `init`. You choose your components once, and you're stuck with them forever. Need to add a worker queue three months later? Good luck - you're either copying from another template or doing it manually.
+
+<Note>
+Aegis Stack doesn't work that way. Your choices aren't permanent. Start with what you need today, add components when requirements change, remove what you outgrow.
+</Note>
+
+## The Modular Evolution Vision
+
+Your stack should grow with you:
+
+```bash
+# Monday: Ship MVP
+aegis init my-api
+
+# Week 3: Add scheduled reports
+aegis add scheduler --project-path ./my-api
+
+# Month 2: Need async workers
+aegis add worker --project-path ./my-api
+
+# Month 6: Scheduler not needed
+aegis remove scheduler --project-path ./my-api
+
+# Stay current with template improvements
+aegis update
+```
+
+<CardGroup cols={2}>
+  <Card title="Other Starters" icon="xmark">
+    - Locked at init
+    - Manual component removal
+    - High risk of git conflicts
+  </Card>
+  <Card title="Aegis Stack" icon="check">
+    - Add components anytime
+    - Remove with one command
+    - Conflicts auto-handled
+  </Card>
+</CardGroup>
+
+## Core Design Principles
+
+### Built-In Testing and Health Monitoring
+
+You should know your system is working. Every Aegis Stack project includes [Overseer](/features/overseer) - a built-in system dashboard that provides live visibility into your application at runtime.
+
+No Datadog. No New Relic. No vendor lock-in. Just a clear view of your system, included from day one.
+
+### Battle-Tested Components
+
+Boring technology wins. Aegis Stack is built on proven tools:
+
+<CardGroup cols={2}>
+  <Card title="FastAPI" icon="bolt">
+    Modern, fast web framework with automatic API documentation
+  </Card>
+  <Card title="Pydantic" icon="shield">
+    Data validation and settings management using Python type annotations
+  </Card>
+  <Card title="SQLModel" icon="database">
+    SQL databases in Python with full type safety
+  </Card>
+  <Card title="APScheduler" icon="clock">
+    Production-ready job scheduling that just works
+  </Card>
+</CardGroup>
+
+### Clean Separation of Concerns
+
+Future you will thank present you. Aegis Stack enforces clean architecture from day one:
+
+- **Components** are isolated and testable
+- **Services** encapsulate business logic
+- **Dependencies** are explicitly managed
+- **Configuration** is environment-based
+
+### Optional Complexity
+
+Not every API needs a message queue. Start simple, add complexity when needed:
+
+```bash
+# Start minimal
+aegis init simple-api
+
+# Add complexity when needed
+aegis add worker --project-path ./simple-api
+aegis add scheduler --project-path ./simple-api
+```
+
+## Why This Matters
+
+<Accordion title="For The Veterans">
+  No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
+
+  Aegis Stack respects your expertise. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
+
+  Aegis gets out of your way so you can get started.
+</Accordion>
+
+<Accordion title="For The Builders">
+  You know what happens when you don't have a solid foundation. When you're scared to refactor because something might break. When deployments are weekend affairs that require all hands on deck.
+
+  It doesn't have to be like this. Aegis Stack gives you the foundation to move fast with confidence.
+</Accordion>
+
+<Accordion title="For The Teams">
+  Leading a team makes defensive coding critical. Being able to protect ourselves from ourselves through type safety, validation, and testing isn't optional - it's survival.
+
+  Aegis Stack makes that philosophy concrete through Pydantic at every layer, comprehensive testing, and clear boundaries.
+</Accordion>
+
+## The End Goal
+
+At the end of the day, we all just want peace. We want to write code and have the confidence to know that it works.
+
+If something goes wrong, we don't want to spend days tracking it down. We don't want to only find out about problems because someone is having a panic attack.
+
+**Aegis Stack embodies the patterns that actually work:**
+
+- Built-in testing and health monitoring because you should know your system is working
+- Battle-tested components because boring technology wins
+- Clean separation of concerns because future you will thank present you
+- Optional complexity because not every API needs a message queue
+
+We just want peace now.

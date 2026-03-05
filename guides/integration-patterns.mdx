@@ -1,0 +1,647 @@
+---
+title: Integration Patterns
+description: Common patterns for integrating components and services in Aegis Stack
+icon: puzzle-piece
+---
+
+Aegis Stack components and services are designed to work together seamlessly. This guide covers common integration patterns and best practices for building robust applications.
+
+## Architecture Overview
+
+Aegis Stack follows a modular architecture:
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="cubes">
+    **Infrastructure Layer**
+    
+    Backend, Database, Workers, Scheduler, Redis
+    
+    Foundation for building features.
+  </Card>
+  
+  <Card title="Services" icon="briefcase">
+    **Business Logic Layer**
+    
+    Auth, AI, Comms
+    
+    Feature modules that use components.
+  </Card>
+</CardGroup>
+
+```
+┌─────────────────────────────────────┐
+│         Services Layer              │
+│  (Auth, AI, Comms, Custom)          │
+└─────────────────────────────────────┘
+            ↓  uses
+┌─────────────────────────────────────┐
+│       Components Layer              │
+│  (Backend, DB, Worker, Scheduler)   │
+└─────────────────────────────────────┘
+```
+
+## Configuration Management
+
+All Aegis Stack projects use centralized configuration via `app/core/config.py`.
+
+### Reading Configuration
+
+```python
+from app.core.config import get_settings
+
+settings = get_settings()
+redis_url = settings.redis_url_effective
+log_level = settings.LOG_LEVEL
+```
+
+<Tip>
+  The `get_settings()` function caches the settings instance. It's safe to call multiple times.
+</Tip>
+
+### Adding Custom Settings
+
+```python app/core/config.py
+class Settings(BaseSettings):
+    # ... existing settings
+    
+    # Custom service settings
+    STRIPE_API_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    
+    # Feature flags
+    ENABLE_BETA_FEATURES: bool = False
+```
+
+Then in `.env`:
+```bash .env
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+ENABLE_BETA_FEATURES=true
+```
+
+## Database Integration
+
+The database component provides SQLModel ORM integration.
+
+### Defining Models
+
+```python app/models/user.py
+from sqlmodel import Field, SQLModel
+from datetime import datetime
+
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+    
+    id: int | None = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_active: bool = True
+```
+
+### Using Database Sessions
+
+<CodeGroup>
+```python Dependency Injection (FastAPI)
+from app.core.db import get_session
+from fastapi import Depends
+from sqlmodel import Session, select
+
+@app.get("/users")
+async def list_users(session: Session = Depends(get_session)):
+    users = session.exec(select(User)).all()
+    return users
+```
+
+```python Direct Session (Workers)
+from app.core.db import get_db_session
+from sqlmodel import select
+
+async def process_users():
+    async with get_db_session() as session:
+        users = session.exec(select(User).where(User.is_active == True)).all()
+        for user in users:
+            # Process user
+            pass
+```
+
+```python Scheduler Jobs
+from app.core.db import get_db_session
+from sqlmodel import select
+
+def cleanup_old_users():
+    """Scheduled job to clean up inactive users"""
+    with get_db_session() as session:
+        old_users = session.exec(
+            select(User).where(User.created_at < cutoff_date)
+        ).all()
+        for user in old_users:
+            session.delete(user)
+        session.commit()
+```
+</CodeGroup>
+
+### Database Migrations
+
+Aegis Stack uses Alembic for migrations:
+
+```bash
+# Create a migration
+alembic revision --autogenerate -m "Add user table"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback
+alembic downgrade -1
+```
+
+<Note>
+  Migrations are automatically run during `aegis update` if auth or AI services are enabled.
+</Note>
+
+## Worker Integration
+
+The worker component uses `arq` for background task processing.
+
+### Defining Background Tasks
+
+```python app/components/worker/functions/email.py
+import logging
+from arq import ArqRedis
+
+logger = logging.getLogger(__name__)
+
+async def send_email(
+    ctx: dict,
+    to_email: str,
+    subject: str,
+    body: str,
+) -> dict:
+    """
+    Background task to send email.
+    
+    Args:
+        ctx: Worker context (includes redis connection)
+        to_email: Recipient email
+        subject: Email subject
+        body: Email body
+    """
+    logger.info(f"Sending email to {to_email}")
+    
+    # TODO: Integrate with email service (Resend, SendGrid, etc.)
+    # For now, just log
+    logger.info(f"Email sent: {subject}")
+    
+    return {"status": "sent", "to": to_email}
+```
+
+### Registering Tasks
+
+```python app/components/worker/settings.py
+from .functions.email import send_email
+from .functions.reports import generate_report
+
+class WorkerSettings:
+    functions = [
+        send_email,
+        generate_report,
+    ]
+    redis_settings = RedisSettings.from_dsn(settings.redis_url_effective)
+```
+
+### Enqueuing Tasks from API
+
+```python app/components/backend/api/users/router.py
+from fastapi import APIRouter, Depends
+from arq import create_pool
+from app.core.config import get_settings
+
+router = APIRouter()
+
+@router.post("/users/register")
+async def register_user(email: str, password: str):
+    # Create user in database
+    user = create_user(email, password)
+    
+    # Enqueue welcome email
+    settings = get_settings()
+    redis = await create_pool(settings.redis_url_effective)
+    await redis.enqueue_job(
+        "send_email",
+        to_email=email,
+        subject="Welcome!",
+        body="Thanks for signing up."
+    )
+    
+    return {"user": user}
+```
+
+<Tip>
+  For better performance, create a Redis pool once and reuse it instead of creating it per request.
+</Tip>
+
+### Worker Pool Reuse Pattern
+
+```python app/core/worker_pool.py
+from arq import ArqRedis, create_pool
+from app.core.config import get_settings
+
+_pool: ArqRedis | None = None
+
+async def get_worker_pool() -> ArqRedis:
+    """Get or create worker pool (singleton)"""
+    global _pool
+    if _pool is None:
+        settings = get_settings()
+        _pool = await create_pool(settings.redis_url_effective)
+    return _pool
+```
+
+Use in endpoints:
+```python
+from app.core.worker_pool import get_worker_pool
+
+@router.post("/tasks")
+async def create_task():
+    pool = await get_worker_pool()
+    await pool.enqueue_job("send_email", ...)
+```
+
+## Scheduler Integration
+
+The scheduler component uses APScheduler for recurring tasks.
+
+### Defining Scheduled Jobs
+
+```python app/components/scheduler.py
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+import logging
+
+logger = logging.getLogger(__name__)
+scheduler = AsyncIOScheduler()
+
+def daily_report():
+    """Generate daily report at 9 AM"""
+    logger.info("Generating daily report")
+    # TODO: Implement report generation
+
+def cleanup_old_data():
+    """Clean up old data every week"""
+    logger.info("Cleaning up old data")
+    # TODO: Implement cleanup
+
+# Schedule jobs
+scheduler.add_job(
+    daily_report,
+    trigger=CronTrigger(hour=9, minute=0),
+    id="daily_report",
+    name="Generate Daily Report",
+    replace_existing=True,
+)
+
+scheduler.add_job(
+    cleanup_old_data,
+    trigger=CronTrigger(day_of_week="sun", hour=2, minute=0),
+    id="cleanup_old_data",
+    name="Clean Up Old Data",
+    replace_existing=True,
+)
+```
+
+### Scheduler with Database Access
+
+```python app/components/scheduler.py
+from app.core.db import get_db_session
+from sqlmodel import select
+from app.models.user import User
+
+def send_weekly_digest():
+    """Send weekly digest to all active users"""
+    with get_db_session() as session:
+        users = session.exec(select(User).where(User.is_active == True)).all()
+        
+        for user in users:
+            # TODO: Send digest email
+            logger.info(f"Sending digest to {user.email}")
+
+scheduler.add_job(
+    send_weekly_digest,
+    trigger=CronTrigger(day_of_week="mon", hour=10, minute=0),
+    id="weekly_digest",
+)
+```
+
+### Scheduler + Worker Pattern
+
+For long-running tasks, combine scheduler with workers:
+
+```python app/components/scheduler.py
+import asyncio
+from arq import create_pool
+from app.core.config import get_settings
+
+def schedule_report_generation():
+    """Scheduler triggers report generation (worker does the work)"""
+    settings = get_settings()
+    
+    # Enqueue job for worker
+    asyncio.run(_enqueue_report())
+
+async def _enqueue_report():
+    settings = get_settings()
+    redis = await create_pool(settings.redis_url_effective)
+    await redis.enqueue_job("generate_report")
+
+# Schedule to run daily
+scheduler.add_job(
+    schedule_report_generation,
+    trigger=CronTrigger(hour=8, minute=0),
+    id="trigger_report",
+)
+```
+
+<Tip>
+  This pattern keeps scheduler lightweight and offloads heavy work to workers.
+</Tip>
+
+## Service Integration Patterns
+
+### Auth + Database
+
+Authentication service integrates with database for user storage:
+
+```python app/services/auth/models.py
+from sqlmodel import Field, SQLModel
+from datetime import datetime
+
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+    
+    id: int | None = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+```
+
+```python app/services/auth/service.py
+from app.core.db import get_session
+from sqlmodel import Session, select
+from fastapi import Depends, HTTPException
+
+def get_current_user(session: Session = Depends(get_session)) -> User:
+    """Dependency to get current authenticated user"""
+    # Extract token, validate, get user from DB
+    user = session.exec(select(User).where(User.id == user_id)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+```
+
+Use in protected endpoints:
+```python
+@router.get("/me")
+def get_profile(current_user: User = Depends(get_current_user)):
+    return current_user
+```
+
+### AI + Database (RAG)
+
+AI service with database for RAG (Retrieval-Augmented Generation):
+
+```python app/services/rag/models.py
+from sqlmodel import Field, SQLModel, Column
+from pgvector.sqlalchemy import Vector  # If using PostgreSQL + pgvector
+
+class Document(SQLModel, table=True):
+    __tablename__ = "documents"
+    
+    id: int | None = Field(default=None, primary_key=True)
+    content: str
+    embedding: list[float] = Field(sa_column=Column(Vector(1536)))
+    metadata: dict = Field(default_factory=dict)
+```
+
+```python app/services/rag/service.py
+from app.core.db import get_session
+from sqlmodel import Session, select
+
+class RAGService:
+    def __init__(self, session: Session):
+        self.session = session
+    
+    async def query(self, query: str) -> str:
+        # 1. Generate query embedding
+        query_embedding = await self.embed(query)
+        
+        # 2. Find similar documents
+        docs = self.session.exec(
+            select(Document)
+            .order_by(Document.embedding.cosine_distance(query_embedding))
+            .limit(5)
+        ).all()
+        
+        # 3. Generate response using retrieved context
+        context = "\n".join([doc.content for doc in docs])
+        response = await self.generate_response(query, context)
+        
+        return response
+```
+
+### Comms + Worker
+
+Communications service using workers for async delivery:
+
+```python app/services/comms/service.py
+from arq import create_pool
+from app.core.config import get_settings
+
+class CommsService:
+    async def send_email(self, to: str, subject: str, body: str):
+        """Queue email for delivery"""
+        settings = get_settings()
+        redis = await create_pool(settings.redis_url_effective)
+        
+        await redis.enqueue_job(
+            "send_email",
+            to_email=to,
+            subject=subject,
+            body=body,
+        )
+        
+    async def send_sms(self, to: str, message: str):
+        """Queue SMS for delivery"""
+        settings = get_settings()
+        redis = await create_pool(settings.redis_url_effective)
+        
+        await redis.enqueue_job(
+            "send_sms",
+            phone=to,
+            message=message,
+        )
+```
+
+## Health Check Integration
+
+Aegis Stack provides built-in health checks via Overseer.
+
+### Custom Health Checks
+
+Add custom checks for your services:
+
+```python app/services/backend/health.py
+from app.core.health import HealthCheck, HealthStatus
+
+class StripeHealthCheck(HealthCheck):
+    """Check Stripe API connectivity"""
+    
+    async def check(self) -> HealthStatus:
+        try:
+            # Ping Stripe API
+            response = await stripe_client.balance.retrieve()
+            
+            return HealthStatus(
+                status="healthy",
+                message="Stripe API reachable",
+                details={"balance": response.available[0].amount}
+            )
+        except Exception as e:
+            return HealthStatus(
+                status="unhealthy",
+                message=f"Stripe API error: {e}",
+            )
+```
+
+Register in startup:
+```python app/components/backend/startup/component_health.py
+from app.services.backend.health import StripeHealthCheck
+
+def register_health_checks():
+    # ... existing checks
+    health_monitor.register(StripeHealthCheck())
+```
+
+## Testing Integration
+
+### Testing with Database
+
+```python tests/test_users.py
+import pytest
+from sqlmodel import Session, create_engine
+from app.models.user import User
+
+@pytest.fixture
+def session():
+    """Create test database session"""
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    
+    with Session(engine) as session:
+        yield session
+
+def test_create_user(session: Session):
+    user = User(email="test@example.com", hashed_password="hash")
+    session.add(user)
+    session.commit()
+    
+    assert user.id is not None
+```
+
+### Testing with Workers
+
+```python tests/test_workers.py
+import pytest
+from arq import create_pool
+from arq.testing import MockRedis
+
+@pytest.fixture
+async def worker_pool():
+    """Create mock worker pool for testing"""
+    return await create_pool(MockRedis())
+
+@pytest.mark.asyncio
+async def test_email_task(worker_pool):
+    job = await worker_pool.enqueue_job(
+        "send_email",
+        to_email="test@example.com",
+        subject="Test",
+        body="Body"
+    )
+    
+    result = await job.result()
+    assert result["status"] == "sent"
+```
+
+## Common Patterns Summary
+
+<CardGroup cols={2}>
+  <Card title="Service Factory" icon="industry">
+    **Pattern**: Create service instances with dependencies
+    
+    ```python
+    def get_user_service(
+        session: Session = Depends(get_session)
+    ) -> UserService:
+        return UserService(session)
+    ```
+  </Card>
+  
+  <Card title="Repository Pattern" icon="database">
+    **Pattern**: Encapsulate database access
+    
+    ```python
+    class UserRepository:
+        def __init__(self, session: Session):
+            self.session = session
+        
+        def get_by_email(self, email: str):
+            return self.session.exec(
+                select(User).where(User.email == email)
+            ).first()
+    ```
+  </Card>
+  
+  <Card title="Event-Driven" icon="bolt">
+    **Pattern**: Decouple services with events
+    
+    ```python
+    # User registered → Send welcome email
+    @router.post("/register")
+    async def register(...):
+        user = create_user(...)
+        await publish_event("user.registered", user)
+    ```
+  </Card>
+  
+  <Card title="CQRS" icon="split">
+    **Pattern**: Separate reads and writes
+    
+    ```python
+    # Write: Use ORM
+    def create_user(...): ...
+    
+    # Read: Use raw SQL for performance
+    def list_users_fast(...):
+        return session.execute("SELECT ...")
+    ```
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Dependency Injection**: Use FastAPI's dependency injection for services
+2. **Connection Pooling**: Reuse database and Redis connections
+3. **Error Handling**: Wrap external service calls in try/except
+4. **Logging**: Log important integration points
+5. **Health Checks**: Implement health checks for all external services
+6. **Testing**: Mock external services in tests
+7. **Configuration**: Use environment variables for service credentials
+
+## Next Steps
+
+<Card title="Related" icon="book">
+  - [Components Reference](/concepts/components)
+  - [Services Reference](/concepts/services)
+  - [Deployment Guide](/guides/deployment)
+</Card>

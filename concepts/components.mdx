@@ -1,0 +1,459 @@
+---
+title: 'Components'
+description: 'Infrastructure building blocks for Aegis Stack projects'
+---
+
+## What Are Components?
+
+Components are **infrastructure pieces** that provide technical capabilities to your application. They handle concerns like data persistence, background processing, caching, and observability.
+
+Components are defined in `aegis/core/components.py:62-123` and form the foundation upon which [services](/concepts/services) build.
+
+<Note>
+Components focus on **how** your application runs (infrastructure), while services focus on **what** your application does (business logic).
+</Note>
+
+## Component Types
+
+Components are classified into two types:
+
+```python
+class ComponentType(Enum):
+    CORE = "core"              # Always included (backend, frontend)
+    INFRASTRUCTURE = "infra"   # Optional infrastructure
+```
+
+From `aegis/core/components.py:12-16`
+
+## Core Components
+
+These components are **always included** and cannot be removed:
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server">
+    FastAPI backend server with Uvicorn
+    
+    **Package**: `fastapi==0.116.1`, `uvicorn==0.35.0`
+    
+    **Files**: `app/components/backend/`
+  </Card>
+  <Card title="Frontend" icon="desktop">
+    Flet UI interface for web and desktop
+    
+    **Package**: `flet==0.28.3`
+    
+    **Files**: `app/components/frontend/`
+  </Card>
+</CardGroup>
+
+## Infrastructure Components
+
+Optional components you can add or remove at any time:
+
+### Database
+
+<Card title="Database" icon="database">
+  **Description**: SQLModel ORM with SQLite or PostgreSQL support
+  
+  **Use When**: You need persistent data storage with relationships
+  
+  **Python Packages**:
+  - `sqlmodel>=0.0.14`
+  - `sqlalchemy>=2.0.0`
+  - `aiosqlite>=0.19.0` (for SQLite)
+  - `asyncpg>=0.29.0` (for PostgreSQL)
+  
+  **Template Files**: `app/core/db.py`
+  
+  **Configuration** (`copier.yml:98-112`):
+  ```yaml
+  include_database: bool
+  database_engine: "sqlite" | "postgres"
+  ```
+</Card>
+
+<Accordion title="Database Usage Example">
+```python
+# app/core/db.py (generated)
+from sqlmodel import SQLModel, create_engine
+
+engine = create_engine(DATABASE_URL)
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+```
+
+Add to your project:
+```bash
+aegis add database
+```
+</Accordion>
+
+### Redis
+
+<Card title="Redis" icon="circle-nodes">
+  **Description**: Redis cache and message broker
+  
+  **Use When**: You need caching, pub/sub, or a message broker for workers
+  
+  **Python Packages**: `redis==5.0.8`
+  
+  **Docker Services**: `redis`
+  
+  **Required By**: Worker component (hard dependency)
+</Card>
+
+<Warning>
+Redis has no standalone functionality in Aegis Stack - it's primarily used by the worker component. If you remove worker, Redis will be auto-removed unless you're using it for caching.
+</Warning>
+
+### Worker
+
+<Card title="Worker" icon="gears">
+  **Description**: Background task processing with Arq
+  
+  **Use When**: You need async job processing, long-running tasks, or scheduled work
+  
+  **Dependencies**: Requires `redis` component (auto-added)
+  
+  **Python Packages**: `arq==0.25.0`
+  
+  **Docker Services**:
+  - `worker-system` - System worker pool
+  - `worker-load-test` - Load testing worker pool
+  
+  **Template Files**: `app/components/worker/`
+</Card>
+
+<Accordion title="Worker Usage Example">
+```python
+# app/components/worker/tasks.py (generated)
+from arq import cron
+
+async def example_task(ctx, user_id: int):
+    """Example background task."""
+    print(f"Processing task for user {user_id}")
+    return {"status": "complete"}
+
+# Enqueue from your API
+from app.components.worker import enqueue_task
+
+await enqueue_task("example_task", user_id=123)
+```
+
+Add to your project:
+```bash
+aegis add worker
+# Auto-adds redis as dependency
+```
+</Accordion>
+
+### Scheduler
+
+<Card title="Scheduler" icon="clock">
+  **Description**: APScheduler for cron-like scheduled tasks
+  
+  **Use When**: You need periodic jobs, scheduled reports, or cleanup tasks
+  
+  **Python Packages**: `apscheduler==3.10.4`
+  
+  **Docker Services**: `scheduler`
+  
+  **Template Files**:
+  - `app/components/scheduler.py`
+  - `app/entrypoints/scheduler.py`
+  
+  **Storage Backends** (`copier.yml:140-149`):
+  - `memory` - No persistence (default)
+  - `sqlite` - Persistent jobs (requires database component)
+  - `postgres` - PostgreSQL persistence (future)
+</Card>
+
+<Accordion title="Scheduler Backend Configuration">
+Scheduler supports multiple storage backends for job persistence:
+
+```bash
+# In-memory (no persistence)
+aegis add scheduler
+
+# SQLite persistence (auto-adds database)
+aegis add scheduler[sqlite]
+
+# Or use flag
+aegis add scheduler --backend sqlite
+```
+
+From `aegis/core/components.py:19-24`:
+```python
+class SchedulerBackend(str, Enum):
+    MEMORY = "memory"      # No persistence
+    SQLITE = "sqlite"      # Requires database component
+    POSTGRES = "postgres"  # Future support
+```
+</Accordion>
+
+<Accordion title="Scheduler Usage Example">
+```python
+# app/components/scheduler.py (generated)
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler()
+
+@scheduler.scheduled_job(CronTrigger(hour=0, minute=0))
+async def daily_cleanup():
+    """Run cleanup tasks at midnight."""
+    print("Running daily cleanup...")
+```
+</Accordion>
+
+### Ingress
+
+<Card title="Ingress" icon="network-wired">
+  **Description**: Traefik reverse proxy and load balancer
+  
+  **Use When**: You need SSL termination, load balancing, or multi-service routing
+  
+  **Docker Services**: `traefik`
+  
+  **Recommends**: `backend` component
+  
+  **Configuration** (`copier.yml:118-138`):
+  ```yaml
+  include_ingress: bool
+  ingress_tls: bool
+  ingress_domain: str
+  ```
+</Card>
+
+### Observability
+
+<Card title="Observability" icon="chart-line">
+  **Description**: Logfire tracing, metrics, and observability
+  
+  **Use When**: You need detailed application telemetry and performance monitoring
+  
+  **Python Packages**: `logfire[fastapi,httpx]`
+  
+  **Template Files**: `app/components/backend/middleware/logfire_tracing.py`
+</Card>
+
+<Accordion title="Observability Integration">
+Logfire automatically instruments your FastAPI application:
+
+```python
+# app/components/backend/middleware/logfire_tracing.py (generated)
+import logfire
+
+logfire.configure()
+logfire.instrument_fastapi(app)
+```
+
+View traces at [logfire.pydantic.dev](https://logfire.pydantic.dev)
+</Accordion>
+
+## Component Dependencies
+
+Components can declare dependencies on other components:
+
+### Hard Dependencies (`requires`)
+
+Automatically added when you include the component:
+
+```python
+# From aegis/core/components.py:84-92
+"worker": ComponentSpec(
+    name="worker",
+    requires=["redis"],  # Hard dependency - auto-added
+    # ...
+)
+```
+
+```bash
+$ aegis add worker
+Auto-added dependencies: redis
+```
+
+### Soft Dependencies (`recommends`)
+
+Suggested but not required:
+
+```python
+"ingress": ComponentSpec(
+    name="ingress",
+    recommends=["backend"],  # Works best with backend
+    # ...
+)
+```
+
+### Conflicts
+
+Components that cannot coexist (currently none defined):
+
+```python
+conflicts: list[str] | None = None
+```
+
+## Dependency Resolution
+
+The `DependencyResolver` (`aegis/core/dependency_resolver.py`) handles automatic dependency resolution:
+
+<Steps>
+  <Step title="Validate component names">
+    Ensures all requested components exist in the registry
+  </Step>
+  <Step title="Check conflicts">
+    Verifies no conflicting components are selected
+  </Step>
+  <Step title="Resolve dependencies">
+    Automatically includes required components
+  </Step>
+  <Step title="Report auto-added">
+    Shows which dependencies were automatically included
+  </Step>
+</Steps>
+
+From `aegis/commands/add.py:166-184`:
+
+```python
+# Validate components and resolve dependencies
+errors = DependencyResolver.validate_components(base_components)
+if errors:
+    for error in errors:
+        typer.secho(f"{error}", fg="red", err=True)
+    raise typer.Exit(1)
+
+# Resolve dependencies
+resolved_components = DependencyResolver.resolve_dependencies(base_components)
+
+# Show dependency resolution
+auto_added = DependencyResolver.get_missing_dependencies(base_components)
+if auto_added:
+    typer.echo(f"Auto-added dependencies: {', '.join(auto_added)}")
+```
+
+## Component Lifecycle
+
+### Adding Components
+
+```bash
+# Add single component
+aegis add scheduler
+
+# Add multiple components
+aegis add worker,database
+
+# Add with configuration
+aegis add scheduler[sqlite]
+
+# Interactive selection
+aegis add --interactive
+```
+
+From `aegis/commands/add.py:27-350`
+
+<Info>
+Adding components is **safe** - existing files are never overwritten. New files are added and configuration is updated in `.copier-answers.yml`.
+</Info>
+
+### Removing Components
+
+```bash
+# Remove single component
+aegis remove scheduler
+
+# Remove multiple components
+aegis remove worker,redis
+
+# Interactive selection
+aegis remove --interactive
+```
+
+From `aegis/commands/remove.py:23-237`
+
+<Warning>
+Removing components **deletes files** and cannot be easily undone. Always commit your changes to git before removing components.
+</Warning>
+
+### Checking Component Status
+
+View currently enabled components:
+
+```bash
+# View .copier-answers.yml
+cat .copier-answers.yml
+
+# Look for include_* keys
+include_scheduler: true
+include_worker: true
+include_database: false
+```
+
+## Component Specification Reference
+
+Full `ComponentSpec` definition from `aegis/core/components.py:31-59`:
+
+```python
+@dataclass
+class ComponentSpec:
+    """Specification for a single component."""
+    
+    name: str                              # Component identifier
+    type: ComponentType                    # CORE or INFRASTRUCTURE
+    description: str                       # Human-readable description
+    requires: list[str] | None = None      # Hard dependencies (auto-added)
+    recommends: list[str] | None = None    # Soft dependencies (suggested)
+    conflicts: list[str] | None = None     # Incompatible components
+    docker_services: list[str] | None = None    # Docker Compose services
+    pyproject_deps: list[str] | None = None     # Python packages
+    template_files: list[str] | None = None     # Template paths to include
+```
+
+## Available Components Registry
+
+All components are registered in `COMPONENTS` dict (`aegis/core/components.py:62-123`):
+
+```python
+COMPONENTS: dict[str, ComponentSpec] = {
+    "backend": ComponentSpec(...),
+    "frontend": ComponentSpec(...),
+    "redis": ComponentSpec(...),
+    "worker": ComponentSpec(...),
+    "scheduler": ComponentSpec(...),
+    "database": ComponentSpec(...),
+    "ingress": ComponentSpec(...),
+    "observability": ComponentSpec(...),
+}
+```
+
+Access component information:
+
+```python
+from aegis.core.components import get_component, list_available_components
+
+# Get specific component
+worker = get_component("worker")
+print(worker.description)  # "Background task processing..."
+
+# List all components
+all_components = list_available_components()
+print(all_components)  # ['backend', 'frontend', 'redis', ...]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Services" icon="briefcase" href="/concepts/services">
+    Learn about business logic services that build on components
+  </Card>
+  <Card title="Evolution" icon="rotate" href="/concepts/evolution">
+    Understand how to add/remove components over time
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Complete command reference for managing components
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/overview">
+    Back to architecture overview
+  </Card>
+</CardGroup>

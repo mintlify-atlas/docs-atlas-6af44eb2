@@ -1,0 +1,601 @@
+---
+title: Worker
+description: Arq-based background task processing with priority queues
+icon: gears
+---
+
+The Worker component provides Redis-based background task processing using Arq. Offload heavy computations, send emails, process files, or handle any long-running operations without blocking your API.
+
+## What It Does
+
+The Worker component:
+
+- **Async Task Processing**: Handle background jobs asynchronously
+- **Priority Queues**: Route tasks to high, medium, or low priority queues
+- **Functional Queues**: Organize tasks by purpose (system, load_test, media)
+- **Redis-Based**: Reliable message queue with persistence
+- **Horizontal Scaling**: Run multiple worker instances
+- **Task Monitoring**: Track job status and results
+- **Retry Logic**: Automatic retries on failure
+
+## When To Use
+
+Add the Worker component when you need:
+
+- **Heavy Processing**: CPU-intensive tasks that block API responses
+- **Email/SMS Sending**: Async communication without API delays
+- **File Processing**: Upload handling, image resizing, video transcoding
+- **External API Calls**: Long HTTP requests to third-party services
+- **Batch Operations**: Process large datasets in the background
+- **Scheduled Tasks**: Combined with Scheduler for deferred execution
+
+<Warning>
+  Workers require the Redis component. It will be automatically added if you include Worker.
+</Warning>
+
+## Adding to Your Project
+
+<Tabs>
+  <Tab title="New Project">
+    Include the worker at project creation:
+    
+    ```bash
+    aegis init my-app --components worker
+    ```
+    
+    This automatically adds:
+    - Worker component files
+    - Redis dependency
+    - Docker services for workers
+  </Tab>
+
+  <Tab title="Existing Project">
+    Add the worker to an existing project:
+    
+    ```bash
+    aegis add worker --project-path ./my-app
+    ```
+    
+    The CLI will:
+    1. Add worker files and task definitions
+    2. Include Redis if not present
+    3. Update pyproject.toml with Arq
+    4. Add docker-compose worker services
+  </Tab>
+</Tabs>
+
+## Configuration
+
+Configure workers in your `.env` file:
+
+```bash
+# Redis Configuration (required for workers)
+REDIS_URL=redis://localhost:6379/0
+REDIS_CONN_TIMEOUT=5
+REDIS_CONN_RETRIES=3
+REDIS_CONN_RETRY_DELAY=1
+
+# Worker Configuration
+WORKER_DEFAULT_QUEUE=system          # Default queue for tasks
+WORKER_LOAD_TEST_QUEUE=load_test    # Queue for load testing
+
+# Worker Pool Sizes (per priority level)
+WORKER_SYSTEM_HIGH_CONCURRENCY=4
+WORKER_SYSTEM_MEDIUM_CONCURRENCY=2
+WORKER_SYSTEM_LOW_CONCURRENCY=1
+```
+
+### Environment Variables
+
+<ResponseField name="REDIS_URL" type="string" default="redis://localhost:6379/0">
+  Redis connection URL for worker queues
+</ResponseField>
+
+<ResponseField name="WORKER_DEFAULT_QUEUE" type="string" default="system">
+  Default functional queue for tasks:
+  - `system`: System maintenance tasks
+  - `load_test`: Load testing tasks
+  - `media`: Media processing tasks (if added)
+</ResponseField>
+
+<ResponseField name="WORKER_*_CONCURRENCY" type="integer" default="varies">
+  Number of concurrent workers per queue/priority:
+  - `WORKER_SYSTEM_HIGH_CONCURRENCY`: High priority (default: 4)
+  - `WORKER_SYSTEM_MEDIUM_CONCURRENCY`: Medium priority (default: 2)
+  - `WORKER_SYSTEM_LOW_CONCURRENCY`: Low priority (default: 1)
+</ResponseField>
+
+## Key Files Generated
+
+<CodeGroup>
+```python app/components/worker/tasks/system_tasks.py
+from typing import Any
+from app.core.log import logger
+
+async def load_test_orchestrator(
+    ctx: dict[str, Any],
+    num_tasks: int = 100,
+    task_type: str = "cpu_intensive",
+    batch_size: int = 10,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """
+    Orchestrate load test by spawning many worker tasks.
+    
+    Args:
+        num_tasks: Number of tasks to spawn
+        task_type: Type of task (cpu_intensive, io_simulation, etc.)
+        batch_size: Tasks per batch
+        
+    Returns:
+        Load test results with throughput metrics
+    """
+    from app.components.worker.pools import get_queue_pool
+    
+    pool, queue_name = await get_queue_pool("load_test")
+    
+    # Spawn tasks in batches
+    task_ids = []
+    for i in range(0, num_tasks, batch_size):
+        batch = min(batch_size, num_tasks - i)
+        for _ in range(batch):
+            job = await pool.enqueue_job(
+                "cpu_intensive_task",
+                _queue_name=queue_name,
+            )
+            task_ids.append(job.job_id)
+    
+    logger.info(f"Spawned {num_tasks} tasks")
+    return {"tasks_spawned": num_tasks, "task_ids": task_ids[:10]}
+
+
+async def cpu_intensive_task(ctx: dict[str, Any]) -> dict[str, str]:
+    """Simulated CPU-intensive task."""
+    # Your heavy processing here
+    return {"status": "completed"}
+```
+
+```python app/components/worker/registry.py
+from arq.worker import Worker, WorkerSettings, Function
+from app.components.worker.tasks import system_tasks
+from app.core.config import settings
+
+def get_worker_settings_for_queue(queue_type: str) -> WorkerSettings:
+    """Get worker settings for specific queue."""
+    queue_metadata = get_queue_metadata(queue_type)
+    
+    return WorkerSettings(
+        functions=[
+            Function(
+                system_tasks.load_test_orchestrator,
+                name="load_test_orchestrator",
+            ),
+            Function(
+                system_tasks.cpu_intensive_task,
+                name="cpu_intensive_task",
+            ),
+        ],
+        redis_settings=RedisSettings.from_dsn(settings.REDIS_URL),
+        queue_name=queue_metadata["queue_name"],
+        max_jobs=queue_metadata["concurrency"],
+        job_timeout=queue_metadata["timeout"],
+    )
+```
+
+```python app/components/worker/pools.py
+from arq import create_pool
+from arq.connections import ArqRedis
+
+_pool_cache: dict[str, ArqRedis] = {}
+
+async def get_queue_pool(queue_type: str | None = None) -> tuple[ArqRedis, str]:
+    """Get Redis pool for enqueueing tasks."""
+    queue_type = queue_type or get_default_queue()
+    
+    # Reuse cached pool
+    if queue_type in _pool_cache:
+        return _pool_cache[queue_type], get_queue_name(queue_type)
+    
+    # Create new pool
+    pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+    _pool_cache[queue_type] = pool
+    
+    return pool, get_queue_name(queue_type)
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+app/components/worker/
+├── __init__.py
+├── pools.py              # Redis pool management for enqueueing
+├── registry.py           # Worker configuration and task registration
+├── constants.py          # Queue names and task identifiers
+├── queues/
+│   ├── __init__.py
+│   ├── system.py         # System queue configuration
+│   ├── load_test.py      # Load test queue configuration
+│   └── media.py          # Media queue (add as needed)
+└── tasks/
+    ├── __init__.py
+    ├── system_tasks.py   # System task functions
+    └── load_tasks.py     # Load testing task functions
+```
+
+## Usage Examples
+
+### Defining Tasks
+
+Create task functions in `app/components/worker/tasks/`:
+
+```python app/components/worker/tasks/my_tasks.py
+from typing import Any
+from app.core.log import logger
+
+async def send_welcome_email(
+    ctx: dict[str, Any],
+    user_email: str,
+    user_name: str,
+) -> dict[str, str]:
+    """
+    Send welcome email to new user.
+    
+    Args:
+        ctx: Arq context with job metadata
+        user_email: Email address
+        user_name: User's name
+        
+    Returns:
+        Task result
+    """
+    logger.info(f"Sending welcome email to {user_email}")
+    
+    # Your email sending logic
+    from app.services.comms import send_email
+    
+    await send_email(
+        to=user_email,
+        subject="Welcome!",
+        body=f"Hello {user_name}, welcome to our app!",
+    )
+    
+    return {"status": "sent", "recipient": user_email}
+
+
+async def process_uploaded_file(
+    ctx: dict[str, Any],
+    file_path: str,
+    user_id: int,
+) -> dict[str, Any]:
+    """Process an uploaded file in the background."""
+    logger.info(f"Processing file: {file_path}")
+    
+    # Your file processing logic
+    # - Validate file
+    # - Resize images
+    # - Generate thumbnails
+    # - Update database
+    
+    return {"status": "processed", "file_path": file_path}
+```
+
+### Registering Tasks
+
+Register tasks in `app/components/worker/registry.py`:
+
+```python
+from app.components.worker.tasks import my_tasks
+
+def get_worker_settings_for_queue(queue_type: str) -> WorkerSettings:
+    return WorkerSettings(
+        functions=[
+            Function(my_tasks.send_welcome_email, name="send_welcome_email"),
+            Function(my_tasks.process_uploaded_file, name="process_uploaded_file"),
+        ],
+        # ... other settings ...
+    )
+```
+
+### Enqueueing Tasks
+
+Enqueue tasks from your API or other components:
+
+<Steps>
+  <Step title="Import the pool manager">
+    ```python
+    from app.components.worker.pools import get_queue_pool
+    ```
+  </Step>
+
+  <Step title="Get the queue pool">
+    ```python
+    # Use default queue
+    pool, queue_name = await get_queue_pool()
+    
+    # Or specify queue
+    pool, queue_name = await get_queue_pool("system")
+    ```
+  </Step>
+
+  <Step title="Enqueue the job">
+    ```python
+    job = await pool.enqueue_job(
+        "send_welcome_email",
+        user_email="user@example.com",
+        user_name="John Doe",
+        _queue_name=queue_name,
+    )
+    
+    logger.info(f"Enqueued job: {job.job_id}")
+    ```
+  </Step>
+</Steps>
+
+### API Integration
+
+Enqueue tasks from FastAPI endpoints:
+
+```python app/components/backend/api/users.py
+from fastapi import APIRouter, BackgroundTasks
+from app.components.worker.pools import get_queue_pool
+
+router = APIRouter(prefix="/api/users")
+
+@router.post("/register")
+async def register_user(email: str, name: str):
+    # Create user in database
+    user = await create_user(email, name)
+    
+    # Enqueue welcome email task
+    pool, queue_name = await get_queue_pool("system")
+    await pool.enqueue_job(
+        "send_welcome_email",
+        user_email=email,
+        user_name=name,
+        _queue_name=queue_name,
+    )
+    
+    return {"id": user.id, "message": "User created, welcome email queued"}
+```
+
+### Priority Queues
+
+Route tasks to appropriate priority levels:
+
+```python
+# High priority - processed first
+pool, queue_name = await get_queue_pool("system")  # Uses high priority worker
+await pool.enqueue_job("urgent_task", _queue_name=queue_name)
+
+# Low priority - processed when high priority queue is empty
+pool, queue_name = await get_queue_pool("load_test")  # Uses low priority worker
+await pool.enqueue_job("background_cleanup", _queue_name=queue_name)
+```
+
+### Checking Job Status
+
+Monitor task execution:
+
+```python
+# Enqueue job and get ID
+job = await pool.enqueue_job("my_task", _queue_name=queue_name)
+job_id = job.job_id
+
+# Check status later
+result = await job.result(timeout=30)  # Wait up to 30 seconds
+if result:
+    logger.info(f"Job completed: {result}")
+else:
+    logger.warning("Job not completed yet")
+```
+
+## Scaling Workers
+
+Adjust worker concurrency:
+
+<Tabs>
+  <Tab title="Environment Variables">
+    Set in `.env`:
+    ```bash
+    WORKER_SYSTEM_HIGH_CONCURRENCY=8    # 8 concurrent high-priority workers
+    WORKER_SYSTEM_MEDIUM_CONCURRENCY=4  # 4 medium-priority workers
+    WORKER_SYSTEM_LOW_CONCURRENCY=2     # 2 low-priority workers
+    ```
+  </Tab>
+
+  <Tab title="Docker Compose">
+    Scale worker services:
+    ```bash
+    docker-compose up -d --scale worker-system=3
+    ```
+    
+    This runs 3 instances of the system worker.
+  </Tab>
+</Tabs>
+
+## Docker Integration
+
+Workers run as separate services:
+
+```yaml docker-compose.yml
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+  
+  worker-system:
+    build: .
+    command: arq app.components.worker.queues.system.WorkerSettings
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - WORKER_SYSTEM_HIGH_CONCURRENCY=${WORKER_SYSTEM_HIGH_CONCURRENCY}
+    depends_on:
+      - redis
+    restart: unless-stopped
+  
+  worker-load-test:
+    build: .
+    command: arq app.components.worker.queues.load_test.WorkerSettings
+    environment:
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+```
+
+## Monitoring
+
+Workers integrate with Overseer:
+
+- **Queue Depths**: See pending tasks per queue
+- **Active Jobs**: Monitor running tasks
+- **Throughput**: Tasks processed per second
+- **Worker Health**: Check worker process status
+
+Access worker metrics:
+```bash
+curl http://localhost:8000/health/worker
+```
+
+## Dependencies
+
+<CardGroup cols={2}>
+  <Card title="Arq" icon="gears">
+    Async task queue built on Redis
+    ```
+    arq>=0.25.0
+    ```
+  </Card>
+  
+  <Card title="Redis" icon="database">
+    Required for message queue
+    ```
+    redis>=5.0.8
+    ```
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Retries
+
+Configure automatic retries:
+
+```python
+from arq import Retry
+
+async def flaky_task(ctx):
+    try:
+        # Attempt operation
+        result = await external_api_call()
+        return result
+    except Exception as e:
+        # Retry up to 3 times with exponential backoff
+        raise Retry(defer=ctx['job_try'] * 5)  # 5s, 10s, 15s
+```
+
+### Task Chaining
+
+Enqueue follow-up tasks:
+
+```python
+async def step_one(ctx):
+    result = await do_work()
+    
+    # Enqueue next step
+    pool, queue_name = await get_queue_pool()
+    await pool.enqueue_job(
+        "step_two",
+        data=result,
+        _queue_name=queue_name,
+    )
+    
+    return result
+
+async def step_two(ctx, data):
+    final_result = await process_data(data)
+    return final_result
+```
+
+### Deferred Execution
+
+Schedule tasks to run later:
+
+```python
+from datetime import timedelta
+
+# Run task in 1 hour
+pool, queue_name = await get_queue_pool()
+await pool.enqueue_job(
+    "reminder_task",
+    user_id=123,
+    _queue_name=queue_name,
+    _defer_by=timedelta(hours=1),
+)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tasks not processing">
+    Check worker and Redis are running:
+    ```bash
+    docker-compose ps worker-system redis
+    docker-compose logs worker-system
+    ```
+  </Accordion>
+
+  <Accordion title="Connection to Redis failed">
+    Verify Redis URL:
+    ```bash
+    redis-cli -u redis://localhost:6379 ping
+    ```
+    
+    Check `REDIS_URL` in `.env` matches your Redis instance.
+  </Accordion>
+
+  <Accordion title="Tasks timing out">
+    Increase timeout in worker configuration:
+    ```python
+    WorkerSettings(
+        job_timeout=600,  # 10 minutes
+        # ...
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Queue backing up">
+    Scale up workers:
+    ```bash
+    docker-compose up -d --scale worker-system=5
+    ```
+    
+    Or increase concurrency:
+    ```bash
+    WORKER_SYSTEM_HIGH_CONCURRENCY=10
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Scheduler" icon="clock" href="/components/scheduler">
+    Schedule recurring worker tasks
+  </Card>
+  
+  <Card title="Backend" icon="server" href="/components/backend">
+    Enqueue tasks from API endpoints
+  </Card>
+  
+  <Card title="Database" icon="database" href="/components/database">
+    Access database from worker tasks
+  </Card>
+</CardGroup>

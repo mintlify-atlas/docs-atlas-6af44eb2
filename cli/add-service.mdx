@@ -1,0 +1,343 @@
+---
+title: 'aegis add-service'
+description: 'Add services to an existing Aegis Stack project'
+---
+
+## Command Syntax
+
+```bash
+aegis add-service [SERVICES] [OPTIONS]
+```
+
+## Description
+
+Add services to an existing Aegis Stack project. This command uses Copier's update mechanism to add new services (auth, AI, etc.) to a project that was generated with `aegis init`.
+
+Services may auto-add required components if they're not already present.
+
+## Arguments
+
+<ParamField path="SERVICES" type="string">
+  Comma-separated list of services to add.
+  
+  Available services: `auth`, `ai`
+  
+  For AI service, use bracket syntax for configuration:
+  - Format: `ai[framework,backend,provider1,provider2]`
+  - Framework: `pydantic-ai`, `langchain`
+  - Backend: `memory`, `sqlite`
+  - Providers: `openai`, `anthropic`, `google`, `groq`
+  
+  Example: `ai[pydantic-ai,sqlite,openai,anthropic]`
+</ParamField>
+
+## Options
+
+<ParamField path="--interactive" type="boolean" default={false}>
+  Use interactive service selection.
+  
+  **Aliases:** `-i`
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+## Examples
+
+### Add auth service
+
+```bash
+aegis add-service auth
+```
+
+Adds authentication service with:
+- User model and database tables
+- JWT token handling
+- Login/register/logout endpoints
+- Password hashing with bcrypt
+- Auto-adds database component if needed
+
+### Add AI service (interactive)
+
+```bash
+aegis add-service ai
+```
+
+Prompts you to configure:
+- Framework (Pydantic AI or LangChain)
+- Backend (memory or SQLite)
+- Providers (OpenAI, Anthropic, Google, Groq)
+- RAG enablement
+
+### Add AI service with configuration
+
+```bash
+aegis add-service ai[pydantic-ai,sqlite,openai,anthropic]
+```
+
+Adds AI service with:
+- Pydantic AI framework
+- SQLite backend for conversation history
+- OpenAI and Anthropic providers
+- Auto-adds database component for SQLite backend
+
+### Add multiple services
+
+```bash
+aegis add-service auth,ai
+```
+
+Adds both authentication and AI services.
+
+### Interactive mode
+
+```bash
+aegis add-service --interactive
+```
+
+Opens an interactive menu to select and configure services.
+
+### Add to specific project
+
+```bash
+aegis add-service auth --project-path ../my-project
+```
+
+Adds auth service to a project in a different directory.
+
+## What Gets Added
+
+When you add a service, Aegis will:
+
+1. **Add service files** - Service implementation, models, and tests
+2. **Add required components** - Database, scheduler, etc. if needed
+3. **Update configuration** - `pyproject.toml`, `docker-compose.yml`, `.copier-answers.yml`
+4. **Install dependencies** - Service-specific Python packages
+5. **Create entrypoints** - CLI commands for the service
+6. **Generate migrations** - Alembic migrations for database tables
+7. **Run migrations** - Automatically apply database changes
+
+### Auth Service
+
+Adding the auth service includes:
+
+- **Models:** `User` model with password hashing
+- **Endpoints:** `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/me`
+- **Authentication:** JWT token-based authentication
+- **Dependencies:** FastAPI security, python-jose, passlib
+- **Database:** Auto-adds database component and runs migrations
+- **CLI:** Test user creation commands
+
+### AI Service
+
+Adding the AI service includes:
+
+- **Framework:** Pydantic AI or LangChain
+- **Backend:** In-memory or SQLite (with conversation history)
+- **Providers:** OpenAI, Anthropic, Google, Groq
+- **Models:** Agent configurations and conversation models
+- **Endpoints:** `/ai/chat`, `/ai/models`, `/ai/history`
+- **CLI:** Interactive chat command
+- **Database:** Auto-adds database component for SQLite backend
+
+## Example Output
+
+```bash
+$ aegis add-service auth
+
+Aegis Stack - Add Services
+==================================================
+Project: /home/user/my-app
+
+Services to add:
+   • auth: User authentication with JWT tokens
+
+Required components (will be auto-added):
+   • database: SQLite database with SQLAlchemy ORM
+
+Add these services? [Y/n]: y
+
+Updating project...
+
+Adding required component: database...
+   Added 8 files
+
+Adding service: auth...
+   Added 15 files
+
+Bootstrapping alembic infrastructure...
+   Created: alembic.ini
+   Created: alembic/env.py
+   Generated migration: 001_create_users_table.py
+
+Applying database migrations...
+   Running: alembic upgrade head
+   ✓ Migrations applied successfully
+
+Services added successfully!
+
+Project Structure:
+   ✓ backend (FastAPI server)
+   ✓ frontend (Flet interface)
+   ✓ database (SQLite + SQLAlchemy)
+   ✓ auth (User authentication) [NEW]
+
+Auth Service Setup:
+   1. Create test users: my-app auth create-test-users
+   2. View auth routes: http://localhost:8000/docs
+
+Next Steps:
+   1. Review changes: git diff
+   2. Install dependencies: make install
+   3. Start services: make dev
+```
+
+## Service Dependencies
+
+<Note>
+Services automatically add required components:
+
+- **Auth service** requires **database**
+- **AI service with SQLite** requires **database**
+- Missing components are shown before confirmation
+</Note>
+
+## Database Migrations
+
+Services that use the database automatically:
+
+1. **Bootstrap Alembic** if not already present
+2. **Generate migration** for service tables
+3. **Run migration** to create tables
+
+If auto-migration fails, run manually:
+
+```bash
+make migrate
+```
+
+## AI Service Configuration
+
+### Framework Options
+
+<CardGroup cols={2}>
+  <Card title="Pydantic AI" icon="python">
+    Type-safe AI framework using Pydantic models
+    
+    ```python
+    from pydantic_ai import Agent
+    agent = Agent('openai:gpt-4')
+    result = agent.run_sync('Hello!')
+    ```
+  </Card>
+  <Card title="LangChain" icon="link">
+    Comprehensive LLM framework with chains and tools
+    
+    ```python
+    from langchain.chat_models import ChatOpenAI
+    llm = ChatOpenAI()
+    result = llm.predict('Hello!')
+    ```
+  </Card>
+</CardGroup>
+
+### Backend Options
+
+- **Memory:** No persistence, conversations lost on restart
+- **SQLite:** Persistent conversation history in database
+
+### Provider Setup
+
+After adding the AI service, configure providers in `.env`:
+
+```bash
+# Set active provider
+AI_PROVIDER=openai
+
+# Add API keys
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+GROQ_API_KEY=gsk_...
+```
+
+Test the AI service:
+
+```bash
+my-app ai chat
+```
+
+## Git Repository Required
+
+<Warning>
+This command requires your project to be in a git repository.
+
+If you haven't initialized git yet:
+
+```bash
+cd my-app
+git init
+git add .
+git commit -m "Initial commit"
+```
+</Warning>
+
+## Troubleshooting
+
+### "Service already enabled"
+
+The service is already in your project:
+
+```bash
+Already enabled: auth
+All requested services are already enabled!
+```
+
+### "Migration failed"
+
+If automatic migration fails, run manually:
+
+```bash
+make migrate
+```
+
+Or:
+
+```bash
+alembic upgrade head
+```
+
+### "Provider not configured"
+
+For AI service, set provider in `.env`:
+
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+```
+
+<Tip>
+Always commit your changes before adding services:
+
+```bash
+git add .
+git commit -m "Before adding auth service"
+aegis add-service auth
+git diff  # Review changes
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis remove-service`](/cli/remove-service) - Remove services from project
+- [`aegis add`](/cli/add) - Add components to project
+- [`aegis services`](/cli/services) - List available services

@@ -1,0 +1,408 @@
+---
+title: 'aegis update'
+description: 'Update project to a newer template version'
+---
+
+## Command Syntax
+
+```bash
+aegis update [OPTIONS]
+```
+
+## Description
+
+Update project to a newer template version. This command uses Copier's git-aware update mechanism to merge template changes into your project while preserving your customizations.
+
+<Note>
+This command requires a clean git working tree. Commit or stash your changes first.
+</Note>
+
+## Options
+
+<ParamField path="--to-version" type="string">
+  Update to specific version (tag, commit, or branch).
+  
+  Defaults to the version matching your installed CLI.
+</ParamField>
+
+<ParamField path="--dry-run" type="boolean" default={false}>
+  Preview changes without applying them.
+</ParamField>
+
+<ParamField path="--project-path" type="string" default=".">
+  Path to the Aegis Stack project.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--template-path" type="string">
+  Use custom template path instead of installed version.
+  
+  Can also be set via `AEGIS_TEMPLATE_PATH` environment variable.
+  
+  **Aliases:** `-t`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+## Examples
+
+### Update to latest version
+
+```bash
+aegis update
+```
+
+Updates to the version matching your installed CLI.
+
+### Update to specific version
+
+```bash
+aegis update --to-version 0.3.0
+```
+
+Updates to template version 0.3.0.
+
+### Preview changes (dry run)
+
+```bash
+aegis update --dry-run
+```
+
+Shows what would change without applying the update.
+
+### Update to specific commit
+
+```bash
+aegis update --to-version abc123def
+```
+
+Updates to a specific git commit.
+
+### Update to branch
+
+```bash
+aegis update --to-version main
+```
+
+Updates to the latest commit on the main branch.
+
+### Use custom template
+
+```bash
+aegis update --template-path ~/dev/aegis-stack
+```
+
+Updates using a local template repository.
+
+### Auto-confirm
+
+```bash
+aegis update --yes
+```
+
+Skips the confirmation prompt.
+
+## Update Process
+
+When you run `aegis update`, the following happens:
+
+1. **Validation** - Checks git status, version compatibility
+2. **Backup** - Creates a git tag as a restore point
+3. **Changelog** - Shows what changed between versions
+4. **Update** - Runs Copier's git-aware merge
+5. **Cleanup** - Moves new files, removes obsolete files
+6. **Sync** - Merges template changes with your customizations
+7. **Post-tasks** - Runs migrations, installs dependencies
+8. **Report** - Shows conflicts that need manual resolution
+
+### Example Output
+
+```bash
+$ aegis update
+
+Aegis Stack - Update Template
+==================================================
+Project: /home/user/my-app
+Git tree is clean
+
+Version Information:
+   Current CLI:      0.3.0
+   Current Template: 0.2.0
+   Target Template:  0.3.0 (current CLI)
+
+Changelog:
+--------------------------------------------------
+v0.3.0 (2024-03-15)
+- Added AI service with RAG support
+- Improved scheduler persistence
+- Fixed worker shutdown handling
+- Updated dependencies
+
+v0.2.5 (2024-03-10)
+- Database migration improvements
+- Auth service enhancements
+--------------------------------------------------
+
+Apply this update? [Y/n]: y
+
+Creating backup point...
+   Backup created: aegis-backup-20240315-123456
+
+Updating project...
+   Moved 5 new files from nested directory
+   Synced 12 template changes
+
+Running post-generation tasks...
+   ✓ Install dependencies
+   ✓ Run database migrations
+   ✓ Format code
+
+Update completed successfully!
+
+Next Steps:
+   1. Review changes: git diff
+   2. Check for conflicts (*.rej files)
+   3. Run tests: make check
+   4. Commit changes: git add . && git commit
+```
+
+## Handling Conflicts
+
+If your customizations conflict with template changes, Copier creates `.rej` files:
+
+```bash
+2 file(s) have merge conflicts (search for <<<<<<< to resolve):
+   - app/backend/main.py
+   - pyproject.toml
+```
+
+### Resolving Conflicts
+
+1. **Search for conflict markers:**
+```bash
+grep -r "<<<<<<<" .
+```
+
+2. **Edit conflicted files:**
+```python
+# app/backend/main.py
+<<<<<<< before updating
+app = FastAPI(title="My App")
+=======
+app = FastAPI(title="My App", version="0.3.0")
+>>>>>>> after updating
+```
+
+3. **Choose the correct version:**
+```python
+# Keep both changes
+app = FastAPI(title="My App", version="0.3.0")
+```
+
+4. **Check for .rej files:**
+```bash
+find . -name "*.rej"
+```
+
+5. **Review and apply .rej patches manually**
+
+6. **Test and commit:**
+```bash
+make check
+git add .
+git commit -m "Update to v0.3.0"
+```
+
+## Rollback on Failure
+
+If the update fails, Aegis offers to rollback:
+
+```bash
+Update failed: [error message]
+
+Rollback to previous state? [Y/n]: y
+
+Rolled back to: aegis-backup-20240315-123456
+```
+
+Manual rollback:
+
+```bash
+git reset --hard aegis-backup-20240315-123456
+```
+
+## Version Compatibility
+
+<Warning>
+**Downgrading is not supported**
+
+Copier does not support downgrading to older template versions. If you need to downgrade:
+
+1. Manually revert to an older git commit
+2. Or regenerate the project with an older CLI version
+</Warning>
+
+### Check current versions
+
+```bash
+# CLI version
+aegis version
+
+# Project template version
+cat .copier-answers.yml | grep _commit
+```
+
+## Git Requirements
+
+<Warning>
+**Clean working tree required**
+
+Commit or stash your changes before updating:
+
+```bash
+# Commit changes
+git add .
+git commit -m "Before update"
+
+# Or stash changes
+git stash
+aegis update
+git stash pop
+```
+</Warning>
+
+## Dry Run Mode
+
+Use `--dry-run` to preview changes:
+
+```bash
+aegis update --dry-run
+```
+
+Shows:
+- Version information
+- Changelog
+- What would change
+
+Does not:
+- Modify any files
+- Create backups
+- Run post-generation tasks
+
+## Custom Templates
+
+For development or testing, use a local template:
+
+```bash
+# Via flag
+aegis update --template-path ~/dev/aegis-stack
+
+# Via environment variable
+export AEGIS_TEMPLATE_PATH=~/dev/aegis-stack
+aegis update
+```
+
+This is useful for:
+- Testing template changes before releasing
+- Using a forked template
+- Developing new features
+
+## Update Checklist
+
+Before updating:
+
+<CardGroup cols={2}>
+  <Card title="Commit Changes" icon="code-commit">
+    ```bash
+    git add .
+    git commit -m "Before update"
+    ```
+  </Card>
+  <Card title="Backup Database" icon="database">
+    Backup important data in `data/` directory
+  </Card>
+  <Card title="Review Changelog" icon="list">
+    Read the changelog to understand what's changing
+  </Card>
+  <Card title="Test After" icon="flask">
+    Run `make check` after updating
+  </Card>
+</CardGroup>
+
+After updating:
+
+1. **Review changes:** `git diff`
+2. **Resolve conflicts:** Search for `<<<<<<<`
+3. **Update dependencies:** `make install`
+4. **Run migrations:** `make migrate`
+5. **Run tests:** `make check`
+6. **Commit:** `git commit -m "Update to vX.Y.Z"`
+
+## Troubleshooting
+
+### "Git tree is not clean"
+
+Commit or stash your changes:
+
+```bash
+git status
+git add .
+git commit -m "WIP"
+```
+
+### "Project is already up to date"
+
+Your project is already at the target version. To force update:
+
+```bash
+aegis update --to-version HEAD
+```
+
+### "Not a Copier project"
+
+Your project wasn't generated with `aegis init` (v0.2.0+). You'll need to regenerate:
+
+```bash
+# Backup your custom code
+cp -r app app.backup
+
+# Regenerate project
+aegis init my-app
+
+# Restore customizations
+cp -r app.backup/* app/
+```
+
+### "Template path not found"
+
+If using `--template-path`, ensure the path is correct:
+
+```bash
+ls ~/dev/aegis-stack
+# Should show: aegis/, pyproject.toml, etc.
+```
+
+<Tip>
+Run `make check` after updating to catch any issues:
+
+```bash
+aegis update
+make check
+```
+
+This runs:
+- Linting (ruff)
+- Type checking (mypy)
+- Tests (pytest)
+</Tip>
+
+## Related Commands
+
+- [`aegis version`](/cli/version) - Show CLI version
+- [`aegis add`](/cli/add) - Add new components
+- [`aegis add-service`](/cli/add-service) - Add new services

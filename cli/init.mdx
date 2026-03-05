@@ -1,0 +1,267 @@
+---
+title: 'aegis init'
+description: 'Initialize a new Aegis Stack project with battle-tested component combinations'
+---
+
+## Command Syntax
+
+```bash
+aegis init PROJECT_NAME [OPTIONS]
+```
+
+## Description
+
+Initialize a new Aegis Stack project with battle-tested component combinations. This command creates a complete project structure with your chosen components, ensuring all dependencies and configurations are compatible and tested.
+
+## Arguments
+
+<ParamField path="PROJECT_NAME" type="string" required>
+  Name of the new Aegis Stack project to create. Must be a valid Python package name.
+</ParamField>
+
+## Options
+
+<ParamField path="--components" type="string">
+  Comma-separated list of components to include.
+  
+  Available components: `redis`, `worker`, `scheduler`, `database`
+  
+  **Aliases:** `-c`
+</ParamField>
+
+<ParamField path="--services" type="string">
+  Comma-separated list of services to include.
+  
+  Available services: `auth`, `ai`
+  
+  For AI service, use bracket syntax for configuration:
+  - Framework: `pydantic-ai` | `langchain`
+  - Backend: `memory` | `sqlite`
+  - Providers: `openai`, `anthropic`, `google`, `groq`
+  
+  Example: `ai[pydantic-ai,sqlite,openai,anthropic]`
+  
+  **Aliases:** `-s`
+</ParamField>
+
+<ParamField path="--python-version" type="string" default="3.12">
+  Python version for generated project.
+  
+  Supported versions: `3.11`, `3.12`, `3.13`, `3.14`
+</ParamField>
+
+<ParamField path="--interactive / --no-interactive" type="boolean" default={true}>
+  Use interactive component selection.
+  
+  **Aliases:** `-i` / `-ni`
+</ParamField>
+
+<ParamField path="--force" type="boolean" default={false}>
+  Overwrite existing directory if it exists.
+  
+  **Aliases:** `-f`
+</ParamField>
+
+<ParamField path="--output-dir" type="string">
+  Directory to create the project in. Defaults to current directory.
+  
+  **Aliases:** `-o`
+</ParamField>
+
+<ParamField path="--yes" type="boolean" default={false}>
+  Skip confirmation prompt.
+  
+  **Aliases:** `-y`
+</ParamField>
+
+<ParamField path="--to-version" type="string">
+  Generate from specific template version (tag, commit, or branch).
+</ParamField>
+
+<ParamField path="--skip-llm-sync" type="boolean" default={false}>
+  Skip LLM catalog sync after project generation (AI service only).
+</ParamField>
+
+<ParamField path="--dev" type="boolean" default={false}>
+  Dev mode: read templates from working tree (uncommitted changes).
+</ParamField>
+
+## Examples
+
+### Basic initialization (interactive)
+
+```bash
+aegis init my-app
+```
+
+Starts interactive mode where you can select components and configure your project.
+
+### Initialize with specific components
+
+```bash
+aegis init my-app --components redis,worker,scheduler
+```
+
+Creates a project with Redis, Worker, and Scheduler components.
+
+### Initialize with services
+
+```bash
+aegis init my-app --services auth --no-interactive
+```
+
+Creates a project with authentication service (auto-adds required components).
+
+### Initialize with AI service
+
+```bash
+aegis init my-app --services ai[pydantic-ai,sqlite,openai] --no-interactive
+```
+
+Creates a project with AI service using Pydantic AI framework, SQLite backend, and OpenAI provider.
+
+### Full stack project
+
+```bash
+aegis init my-app \
+  --components redis,worker,scheduler,database \
+  --services auth,ai \
+  --python-version 3.12 \
+  --no-interactive
+```
+
+Creates a complete project with all infrastructure components and services.
+
+### Custom output directory
+
+```bash
+aegis init my-app --output-dir ~/projects
+```
+
+Creates the project in `~/projects/my-app`.
+
+### Force overwrite existing directory
+
+```bash
+aegis init my-app --force
+```
+
+Overwrites the existing `my-app` directory if it exists.
+
+## Project Structure
+
+After initialization, your project will have this structure:
+
+```
+my-app/
+├── app/
+│   ├── backend/          # FastAPI backend (always included)
+│   ├── frontend/         # Flet frontend (always included)
+│   ├── redis/            # Redis component (if selected)
+│   ├── worker/           # Worker component (if selected)
+│   ├── scheduler/        # Scheduler component (if selected)
+│   ├── database/         # Database component (if selected)
+│   ├── auth/             # Auth service (if selected)
+│   └── ai/               # AI service (if selected)
+├── tests/
+├── docker-compose.yml
+├── pyproject.toml
+├── Makefile
+└── README.md
+```
+
+## Component Dependencies
+
+<Note>
+Aegis automatically resolves component dependencies:
+
+- **Worker** requires **Redis**
+- **Scheduler with SQLite** requires **Database**
+- **Auth service** requires **Database**
+- **AI service with SQLite** requires **Database**
+</Note>
+
+## Next Steps
+
+After creating your project:
+
+<CardGroup cols={2}>
+  <Card title="Install Dependencies" icon="download" href="#install-dependencies">
+    Run `make install` to set up your development environment
+  </Card>
+  <Card title="Start Development" icon="play" href="#start-development">
+    Run `make dev` to start all services
+  </Card>
+  <Card title="Run Tests" icon="flask" href="#run-tests">
+    Run `make test` to verify everything works
+  </Card>
+  <Card title="Add Components" icon="plus" href="/cli/add">
+    Use `aegis add` to add more components later
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Minimal API backend
+
+```bash
+aegis init api-backend --no-interactive
+```
+
+Creates a minimal project with just FastAPI backend and Flet frontend.
+
+### Background job processor
+
+```bash
+aegis init job-processor --components redis,worker --no-interactive
+```
+
+Creates a project optimized for background job processing.
+
+### Scheduled tasks application
+
+```bash
+aegis init scheduler-app --components scheduler[sqlite],database --no-interactive
+```
+
+Creates a project with persistent scheduled tasks.
+
+### Full-featured web application
+
+```bash
+aegis init webapp \
+  --components redis,worker,scheduler,database \
+  --services auth \
+  --no-interactive
+```
+
+Creates a complete web application with authentication and background processing.
+
+## Troubleshooting
+
+<Warning>
+**Directory already exists**
+
+If you see "Directory 'my-app' already exists", use `--force` to overwrite or choose a different name.
+</Warning>
+
+<Warning>
+**Invalid project name**
+
+Project names must be valid Python package names (lowercase, underscores allowed, no hyphens in the package itself).
+</Warning>
+
+<Tip>
+Use `--verbose` flag before the command to see detailed file operations:
+
+```bash
+aegis --verbose init my-app
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis add`](/cli/add) - Add components to existing project
+- [`aegis add-service`](/cli/add-service) - Add services to existing project
+- [`aegis components`](/cli/components) - List available components
+- [`aegis services`](/cli/services) - List available services

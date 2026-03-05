@@ -1,0 +1,165 @@
+---
+title: Introduction
+description: CLI for creating and evolving modular full stack Python applications over time, built on tools you already know.
+---
+
+<img
+  className="block dark:hidden"
+  src="https://github.com/lbedner/aegis-stack/raw/main/docs/images/aegis-manifesto.png"
+  alt="Aegis Stack"
+  width="400"
+/>
+<img
+  className="hidden dark:block"
+  src="https://github.com/lbedner/aegis-stack/raw/main/docs/images/aegis-manifesto-dark.png"
+  alt="Aegis Stack"
+  width="400"
+/>
+
+You need to ship reliable software, but management only gave you 2 weeks.
+
+No time for health checks, proper testing, or clean architecture. Just enough time for duct tape and hope.
+
+**What if you could go from idea to working prototype in the time it takes to grab coffee?**
+
+Aegis Stack is a system for creating and evolving modular Python applications over time, built on tools you already know.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Modular Components" icon="puzzle-piece" href="/concepts/components">
+    Add or remove infrastructure components at any time — scheduler, workers, database, Redis, and more
+  </Card>
+  <Card title="CLI-Driven" icon="terminal" href="/cli/init">
+    Generate production-ready projects with a single command using Copier templates
+  </Card>
+  <Card title="Built-In Visibility" icon="chart-line" href="/features/overseer">
+    Overseer dashboard provides live system metrics without external monitoring tools
+  </Card>
+  <Card title="FastAPI Backend" icon="bolt" href="/components/backend">
+    Modern async Python with FastAPI, Pydantic V2, and Uvicorn
+  </Card>
+  <Card title="Docker Workflow" icon="docker" href="/installation">
+    Consistent development environments with Docker Compose
+  </Card>
+  <Card title="Background Jobs" icon="clock" href="/components/worker">
+    Process tasks asynchronously with workers and scheduled jobs
+  </Card>
+  <Card title="Optional AI Service" icon="brain" href="/services/ai">
+    Integrate PydanticAI or LangChain for AI capabilities
+  </Card>
+  <Card title="Authentication" icon="shield" href="/services/authentication">
+    JWT-based authentication service ready to use
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+Get up and running in minutes:
+
+<CodeGroup>
+
+```bash uvx (instant)
+uvx aegis-stack init my-api
+cd my-api && uv sync && cp .env.example .env && make serve
+```
+
+```bash pip
+pip install aegis-stack
+aegis init my-api
+cd my-api && uv sync && cp .env.example .env && make serve
+```
+
+```bash uv tool
+uv tool install aegis-stack
+aegis init my-api
+cd my-api && uv sync && cp .env.example .env && make serve
+```
+
+</CodeGroup>
+
+Your API will be running at `http://localhost:8000` with interactive docs at `http://localhost:8000/docs`.
+
+## Stack Evolution
+
+**Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
+
+```bash
+# Monday: Ship MVP
+aegis init my-api
+
+# Week 3: Add scheduled reports
+aegis add scheduler --project-path ./my-api
+
+# Month 2: Need async workers
+aegis add worker --project-path ./my-api
+
+# Month 6: Scheduler not needed
+aegis remove scheduler --project-path ./my-api
+
+# Stay current with template improvements
+aegis update
+```
+
+<Note>
+Most starters lock you in at `init`. Aegis Stack doesn't. Learn more in [Evolving Your Stack](/concepts/evolution).
+</Note>
+
+## Available Components & Services
+
+### Components (Infrastructure)
+
+- **Backend** → FastAPI + Pydantic V2 + Uvicorn
+- **Frontend** → Flet UI framework
+- **Database** → Postgres / SQLite with SQLModel
+- **Cache/Queue** → Redis
+- **Scheduler** → APScheduler for cron-like tasks
+- **Worker** → Arq / Taskiq for background jobs
+- **Ingress** → Traefik reverse proxy
+
+### Services (Business Logic)
+
+- **Auth** → JWT authentication
+- **AI** → PydanticAI / LangChain integration
+- **Comms** → Resend + Twilio for email/SMS
+
+## System Features
+
+Aegis Stack includes built-in tools for understanding your running system:
+
+<CardGroup cols={3}>
+  <Card title="Overseer" icon="dashboard" href="/features/overseer">
+    Web dashboard for live system metrics and health monitoring
+  </Card>
+  <Card title="CLI Interface" icon="terminal" href="/features/cli-interface">
+    Rich terminal commands for inspecting components and services
+  </Card>
+  <Card title="Illiana" icon="comments" href="/features/illiana">
+    Optional conversational interface powered by AI service
+  </Card>
+</CardGroup>
+
+## For The Veterans
+
+No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
+
+Aegis Stack respects your expertise. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
+
+Aegis gets out of your way so you can get started.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Aegis Stack and set up your environment
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create your first project in minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Understand how Aegis Stack works
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Explore all available commands
+  </Card>
+</CardGroup>

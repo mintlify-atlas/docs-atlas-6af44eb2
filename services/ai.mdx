@@ -1,0 +1,673 @@
+---
+title: AI Service
+description: Multi-provider AI chatbot service with PydanticAI/LangChain support, RAG capabilities, voice features, and LLM catalog
+icon: brain-circuit
+---
+
+The AI service provides production-ready conversational AI with support for multiple providers, optional RAG (Retrieval-Augmented Generation), voice capabilities, and comprehensive LLM model management.
+
+## Overview
+
+The AI service includes:
+
+- **Multi-provider support**: OpenAI, Anthropic, Google, Groq, Mistral, Cohere, Ollama, and public endpoints
+- **Framework flexibility**: Choose between PydanticAI or LangChain
+- **RAG integration**: Optional document indexing and retrieval for context-aware responses
+- **Voice capabilities**: Speech-to-Text (STT) and Text-to-Speech (TTS) support
+- **LLM catalog**: Built-in database of models with pricing, capabilities, and vendor information
+- **Conversation persistence**: Memory, SQLite, or PostgreSQL storage backends
+
+<Note>
+The AI service requires the **backend** component. Add **database** for conversation persistence and LLM tracking.
+</Note>
+
+## Adding AI to Your Project
+
+Add the AI service during project creation or to an existing project:
+
+<CodeGroup>
+```bash New Project (PydanticAI)
+aegis init my-app --services ai
+cd my-app
+```
+
+```bash New Project (LangChain)
+aegis init my-app --services ai
+# Select langchain when prompted for framework
+```
+
+```bash Existing Project
+aegis add-service ai --project-path ./my-app
+```
+</CodeGroup>
+
+### Configuration Options
+
+During service setup, you'll configure:
+
+<Steps>
+  <Step title="AI Framework">
+    Choose between **PydanticAI** (modern, type-safe) or **LangChain** (feature-rich ecosystem)
+  </Step>
+  
+  <Step title="AI Providers">
+    Select one or more providers: `openai`, `anthropic`, `google`, `groq`, `mistral`, `cohere`, `ollama`, `public`
+  </Step>
+  
+  <Step title="Storage Backend">
+    - **memory**: No persistence (default)
+    - **sqlite**: Local file-based storage
+    - **postgres**: Production-ready database
+  </Step>
+  
+  <Step title="Optional Features">
+    - **RAG**: Enable document indexing and retrieval
+    - **Voice**: Add STT/TTS capabilities
+  </Step>
+</Steps>
+
+## Supported Providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="openai">
+    GPT-4, GPT-3.5 models with function calling and vision
+    
+    [Get API Key →](https://platform.openai.com/api-keys)
+  </Card>
+  
+  <Card title="Anthropic" icon="message-bot">
+    Claude models with large context windows
+    
+    [Get API Key →](https://console.anthropic.com/)
+  </Card>
+  
+  <Card title="Google" icon="google">
+    Gemini models with multimodal capabilities
+    
+    [Get API Key →](https://aistudio.google.com/app/apikey)
+  </Card>
+  
+  <Card title="Groq" icon="bolt">
+    Fast inference with Llama, Mixtral models
+    
+    [Get API Key →](https://console.groq.com/keys)
+  </Card>
+  
+  <Card title="Mistral" icon="wind">
+    Efficient European AI models
+    
+    [Get API Key →](https://console.mistral.ai/api-keys/)
+  </Card>
+  
+  <Card title="Cohere" icon="c">
+    Enterprise-focused language models
+    
+    [Get API Key →](https://dashboard.cohere.com/api-keys)
+  </Card>
+  
+  <Card title="Ollama" icon="server">
+    Local model inference (no API key required)
+    
+    [Install Ollama →](https://ollama.ai)
+  </Card>
+  
+  <Card title="Public" icon="globe">
+    Free public endpoints (no API key required)
+    
+    Ready to use immediately
+  </Card>
+</CardGroup>
+
+## Configuration
+
+Configure AI settings in your `.env` file:
+
+```bash .env
+# AI Service Configuration
+AI_ENABLED=true
+AI_PROVIDER=openai  # openai, anthropic, google, groq, mistral, cohere, ollama, public
+AI_MODEL=gpt-3.5-turbo
+AI_TEMPERATURE=0.7
+AI_MAX_TOKENS=1000
+AI_TIMEOUT_SECONDS=120.0
+
+# Provider API Keys (set for your chosen provider)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=AI...
+GROQ_API_KEY=gsk_...
+MISTRAL_API_KEY=...
+COHERE_API_KEY=...
+
+# Ollama Configuration (if using local models)
+OLLAMA_BASE_URL=http://localhost:11434
+
+# RAG Configuration (if enabled)
+RAG_CHAT_DEFAULT_COLLECTION=default
+RAG_CHAT_TOP_K=10
+RAG_CHAT_MIN_SCORE=0.1
+
+# Conversation Persistence (if using database backend)
+AI_BACKEND=postgres  # memory, sqlite, postgres
+```
+
+<Warning>
+**API keys should never be committed to version control.** Use `.env` files and keep them out of git.
+</Warning>
+
+## API Endpoints
+
+The AI service exposes REST endpoints for chat interactions:
+
+### Chat Completion
+
+```http
+POST /api/v1/ai/chat
+```
+
+Send a message and get an AI response.
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is the meaning of life?",
+    "conversation_id": null,
+    "stream": false
+  }'
+```
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/ai/chat",
+        json={
+            "message": "Explain quantum computing in simple terms",
+            "stream": False
+        }
+    )
+    data = response.json()
+    print(data["response"])
+```
+
+```javascript JavaScript
+const response = await fetch('http://localhost:8000/api/v1/ai/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    message: 'Tell me a joke',
+    stream: false
+  })
+});
+
+const data = await response.json();
+console.log(data.response);
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "message_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "response": "Life is what you make of it...",
+  "provider": "openai",
+  "model": "gpt-3.5-turbo"
+}
+```
+
+### Streaming Chat
+
+```http
+POST /api/v1/ai/chat
+```
+
+Stream responses in real-time using Server-Sent Events (SSE).
+
+```python Python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    async with client.stream(
+        "POST",
+        "http://localhost:8000/api/v1/ai/chat",
+        json={
+            "message": "Write a short story",
+            "stream": True
+        }
+    ) as response:
+        async for chunk in response.aiter_text():
+            print(chunk, end="", flush=True)
+```
+
+### Voice Input
+
+```http
+POST /api/v1/ai/voice/chat
+```
+
+Send audio and receive text response (requires voice features).
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ai/voice/chat \
+  -F "audio=@recording.wav" \
+  -F "format=wav"
+```
+
+### Conversation Management
+
+<CardGroup cols={2}>
+  <Card title="List Conversations" icon="list">
+    ```http
+    GET /api/v1/ai/conversations
+    ```
+    Retrieve all saved conversations
+  </Card>
+  
+  <Card title="Get Conversation" icon="messages">
+    ```http
+    GET /api/v1/ai/conversations/{id}
+    ```
+    Retrieve a specific conversation with history
+  </Card>
+  
+  <Card title="Delete Conversation" icon="trash">
+    ```http
+    DELETE /api/v1/ai/conversations/{id}
+    ```
+    Remove a conversation and its messages
+  </Card>
+  
+  <Card title="Health Check" icon="heart-pulse">
+    ```http
+    GET /api/v1/ai/health
+    ```
+    Check AI service status and configuration
+  </Card>
+</CardGroup>
+
+## LLM Model Management
+
+The AI service includes a built-in catalog of LLM models with pricing, capabilities, and vendor information.
+
+### List Available Models
+
+```bash
+# List all models
+aegis ai llm list
+
+# Search by name
+aegis ai llm list --pattern gpt
+
+# Filter by vendor
+aegis ai llm list --vendor openai
+
+# Filter by modality
+aegis ai llm list --modality vision
+```
+
+### View Current Configuration
+
+```bash
+aegis ai llm current
+```
+
+**Output:**
+```
+Provider: openai
+Model: gpt-3.5-turbo
+Temperature: 0.7
+Max Tokens: 1000
+Context Window: 16,385 tokens
+Input Price: $0.50 per 1M tokens
+Output Price: $1.50 per 1M tokens
+```
+
+### Switch Models
+
+```bash
+# Switch to a different model (auto-detects provider)
+aegis ai llm set gpt-4-turbo
+
+# Switch to Claude
+aegis ai llm set claude-3-opus-20240229
+
+# Force set model not in catalog
+aegis ai llm set custom-model --force
+```
+
+### List Vendors and Modalities
+
+```bash
+# Show all vendors
+aegis ai llm vendors
+
+# Show available modalities
+aegis ai llm modalities
+```
+
+## Provider Management
+
+Dynamically install and configure AI providers after project creation:
+
+```bash
+# Install a new provider
+aegis ai provider install anthropic
+
+# Check provider status
+aegis ai provider status
+
+# List available providers
+aegis ai provider list
+```
+
+The service automatically:
+- Installs required Python packages
+- Updates your `.env` file
+- Validates configuration
+
+## RAG (Retrieval-Augmented Generation)
+
+When RAG is enabled, the AI service can index and search documents to provide context-aware responses.
+
+### Index Documents
+
+```bash
+# Index a directory of documents
+aegis ai rag index ./docs --collection my-docs
+
+# Index specific file types
+aegis ai rag index ./code --include "*.py" --collection python-code
+```
+
+### Query with Context
+
+```python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    response = await client.post(
+        "http://localhost:8000/api/v1/ai/chat",
+        json={
+            "message": "How do I configure the database?",
+            "use_rag": True,
+            "collection": "my-docs"
+        }
+    )
+```
+
+The AI will search indexed documents and include relevant context in its response.
+
+### RAG Statistics
+
+```bash
+# View RAG index statistics
+aegis ai rag stats
+
+# List collections
+aegis ai rag collections
+```
+
+## Voice Capabilities
+
+When voice features are enabled, the service provides STT and TTS:
+
+### Speech-to-Text (STT)
+
+```python
+from app.services.ai.voice import STTService, AudioFormat
+
+stt_service = STTService()
+
+# Transcribe audio file
+result = await stt_service.transcribe(
+    audio_path="recording.wav",
+    format=AudioFormat.WAV
+)
+
+print(result.text)
+for segment in result.segments:
+    print(f"[{segment.start}s - {segment.end}s]: {segment.text}")
+```
+
+### Text-to-Speech (TTS)
+
+```python
+from app.services.ai.voice import TTSService
+
+tts_service = TTSService()
+
+# Generate speech
+audio_data = await tts_service.speak(
+    text="Hello, this is a test",
+    voice="alloy",
+    output_format="mp3"
+)
+
+# Save to file
+with open("output.mp3", "wb") as f:
+    f.write(audio_data)
+```
+
+## Usage Examples
+
+### Simple Chat Integration
+
+```python
+from app.services.ai.llm_service import chat_completion
+
+async def ask_ai(question: str) -> str:
+    """Get AI response to a question."""
+    result = await chat_completion(
+        message=question,
+        provider="openai",
+        model="gpt-3.5-turbo"
+    )
+    return result.response
+```
+
+### Conversation with Context
+
+```python
+from app.services.ai.models import Conversation, MessageRole
+
+async def multi_turn_conversation():
+    """Handle a multi-turn conversation."""
+    conversation = Conversation(
+        id="conv-123",
+        provider="openai",
+        model="gpt-3.5-turbo"
+    )
+    
+    # First message
+    conversation.add_message(
+        role=MessageRole.USER,
+        content="What is Python?"
+    )
+    response1 = await chat_completion(
+        message="What is Python?",
+        conversation_id=conversation.id
+    )
+    conversation.add_message(
+        role=MessageRole.ASSISTANT,
+        content=response1.response
+    )
+    
+    # Follow-up with context
+    conversation.add_message(
+        role=MessageRole.USER,
+        content="What are its main use cases?"
+    )
+    response2 = await chat_completion(
+        message="What are its main use cases?",
+        conversation_id=conversation.id
+    )
+    
+    return response2.response
+```
+
+### Custom System Prompt
+
+```python
+from app.services.ai.prompts import build_system_prompt
+
+async def code_review_agent(code: str) -> str:
+    """AI code reviewer."""
+    system_prompt = """
+    You are an expert code reviewer. Analyze the provided code for:
+    - Bugs and potential issues
+    - Performance improvements
+    - Best practices
+    - Security vulnerabilities
+    
+    Provide constructive feedback in a structured format.
+    """
+    
+    result = await chat_completion(
+        message=f"Review this code:\n\n{code}",
+        system_prompt=system_prompt,
+        temperature=0.3  # Lower for more deterministic reviews
+    )
+    
+    return result.response
+```
+
+### Function Calling (Tool Use)
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class WeatherResult(BaseModel):
+    location: str
+    temperature: float
+    condition: str
+
+agent = Agent(
+    "openai:gpt-4",
+    result_type=WeatherResult,
+    system_prompt="Extract weather information from user queries"
+)
+
+result = await agent.run("What's the weather in San Francisco?")
+print(result.data)  # WeatherResult object
+```
+
+## Integration with Illiana
+
+When the AI service is enabled, your project includes **Illiana**, a conversational interface for system monitoring:
+
+```bash
+# Chat with Illiana in the terminal
+aegis chat
+
+# Ask about system status
+> What's the status of the worker queue?
+> Show me recent database errors
+> How many users are registered?
+```
+
+Illiana uses the AI service to answer questions about your running application using live telemetry.
+
+## Provider Capabilities
+
+Different providers support different features:
+
+| Provider   | Streaming | Function Calling | Vision | Free Tier |
+|------------|-----------|------------------|--------|----------|
+| OpenAI     | ✅        | ✅               | ✅     | ❌       |
+| Anthropic  | ✅        | ✅               | ✅     | ❌       |
+| Google     | ✅        | ✅               | ✅     | ❌       |
+| Groq       | ✅        | ❌               | ❌     | ❌       |
+| Mistral    | ✅        | ✅               | ❌     | ❌       |
+| Cohere     | ✅        | ❌               | ❌     | ❌       |
+| Ollama     | ✅        | ❌               | ❌     | ✅       |
+| Public     | ❌        | ❌               | ❌     | ✅       |
+
+## Testing
+
+Test AI functionality in your application:
+
+```python tests/test_ai.py
+import pytest
+from httpx import AsyncClient
+
+@pytest.mark.asyncio
+async def test_chat_endpoint(client: AsyncClient):
+    """Test basic chat completion."""
+    response = await client.post(
+        "/api/v1/ai/chat",
+        json={
+            "message": "Say hello",
+            "stream": False
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "response" in data
+    assert "conversation_id" in data
+
+@pytest.mark.asyncio
+async def test_conversation_persistence(client: AsyncClient):
+    """Test conversation context is maintained."""
+    # First message
+    response1 = await client.post(
+        "/api/v1/ai/chat",
+        json={"message": "My name is Alice"}
+    )
+    conv_id = response1.json()["conversation_id"]
+    
+    # Follow-up should remember context
+    response2 = await client.post(
+        "/api/v1/ai/chat",
+        json={
+            "message": "What is my name?",
+            "conversation_id": conv_id
+        }
+    )
+    
+    assert "Alice" in response2.json()["response"]
+```
+
+## Dependencies
+
+The AI service requires:
+
+**Core:**
+- `pydantic-ai-slim==1.0.10` (with provider extras)
+- `httpx>=0.27.0`
+
+**Provider-specific packages** (installed based on selection):
+- OpenAI: `openai`
+- Anthropic: `anthropic`
+- Google: `google-genai`
+- Groq: `groq`
+
+**Optional features:**
+- RAG: Vector database dependencies
+- Voice: `openai-whisper`, `pydub`
+
+Dependencies are automatically managed when you install or switch providers.
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Backend Component" icon="server" href="/components/backend">
+    Required for API endpoints
+  </Card>
+  
+  <Card title="Database Component" icon="database" href="/components/database">
+    For conversation persistence and LLM tracking
+  </Card>
+  
+  <Card title="Overseer Dashboard" icon="gauge" href="/features/overseer">
+    Monitor AI usage and conversations
+  </Card>
+  
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Manage AI service from the command line
+  </Card>
+</CardGroup>

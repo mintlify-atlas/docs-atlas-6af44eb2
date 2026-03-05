@@ -1,0 +1,378 @@
+---
+title: "CLI Interface"
+description: "First-class system interface from the terminal"
+---
+
+The Aegis CLI is a first-class interface to your running system. It goes beyond simple health checks, exposing rich, component-specific commands for inspecting and understanding your application from the terminal.
+
+<Note>
+  This page documents the CLI that comes **with your generated project**, not the `aegis` CLI used for scaffolding.
+</Note>
+
+## The Generated CLI
+
+Every Aegis Stack project includes a custom CLI with your project name:
+
+```bash
+# If your project is named 'my-api'
+my-api health status          # System health
+my-api ai chat               # AI chat interface
+my-api tasks list            # Scheduler tasks
+```
+
+## Core Commands
+
+### Health Monitoring
+
+Inspect system health and component status:
+
+```bash
+# Quick status check
+my-api health status
+
+# Detailed component information with response times
+my-api health status --detailed
+
+# JSON output for scripting
+my-api health status --json
+
+# Health probe (exits 1 if unhealthy - useful for monitoring)
+my-api health probe
+```
+
+**What you see:**
+
+<CardGroup cols={2}>
+  <Card title="Component Tree" icon="sitemap">
+    Hierarchical view of all components and services with status indicators
+  </Card>
+  <Card title="Health Percentage" icon="percent">
+    Overall system health score based on component status
+  </Card>
+  <Card title="Response Times" icon="clock">
+    Component health check latency (with `--detailed` flag)
+  </Card>
+  <Card title="Metadata" icon="circle-info">
+    Component-specific metrics like queue depth, active jobs, connection counts
+  </Card>
+</CardGroup>
+
+**Example output:**
+
+```bash
+$ my-api health status --detailed
+
+╭─────────────────── System Health - Healthy ──────────────────╮
+│ Overall Status: Healthy                                      │
+│ Health Percentage: 100.0%                                    │
+│ Components: 6 healthy                                        │
+│ Services: 2 healthy                                          │
+│ Timestamp: 2024-11-15T10:30:45.123456                       │
+╰──────────────────────────────────────────────────────────────╯
+
+Component & Service Tree:
+✓ aegis    System root
+   ├── ✓ backend (42.3ms)    FastAPI backend server is running
+   ├── ✓ database (15.1ms)   Database connection healthy
+   │   ├── Total connections: 5
+   │   ├── Active: 2
+   │   └── Version: PostgreSQL 15.3
+   ├── ✓ worker (8.7ms)      Worker pool healthy
+   │   ├── Queue depth: 3
+   │   └── Active jobs: 1
+   └── services
+       ├── ✓ ai (28.9ms)     AI service operational
+       │   ├── Provider: openai
+       │   ├── Model: gpt-4o-mini
+       │   └── Total requests: 142
+       └── ✓ auth (5.2ms)    Auth service operational
+           └── Total users: 8
+```
+
+### Component-Specific Commands
+
+The CLI exposes commands for each component in your stack:
+
+<Accordion title="Scheduler Commands (if scheduler component is present)">
+  ```bash
+  # List all scheduled tasks
+  my-api tasks list
+
+  # Show task details
+  my-api tasks show <task-id>
+
+  # View upcoming runs
+  my-api tasks upcoming
+  ```
+</Accordion>
+
+<Accordion title="AI Commands (if AI service is enabled)">
+  ```bash
+  # Check AI service status
+  my-api ai status
+
+  # List available providers
+  my-api ai providers
+
+  # Interactive chat
+  my-api ai chat
+
+  # Chat with RAG-enabled context
+  my-api ai chat --rag --collection mycode
+
+  # List conversations
+  my-api ai conversations
+
+  # View usage statistics
+  my-api ai usage
+  ```
+</Accordion>
+
+<Accordion title="Auth Commands (if Auth service is enabled)">
+  ```bash
+  # List users
+  my-api auth list-users
+
+  # Create user
+  my-api auth create-user
+
+  # Reset password
+  my-api auth reset-password <email>
+  ```
+</Accordion>
+
+<Accordion title="RAG Commands (if AI service has RAG enabled)">
+  ```bash
+  # Index a directory
+  my-api rag index ./app --collection mycode
+
+  # List collections
+  my-api rag collections
+
+  # Collection statistics
+  my-api rag stats <collection-name>
+
+  # Search
+  my-api rag search "query" --collection mycode
+  ```
+</Accordion>
+
+<Accordion title="Load Testing (if worker component is present)">
+  ```bash
+  # Enqueue test jobs
+  my-api load-test enqueue --count 100
+
+  # Monitor queue processing
+  my-api load-test status
+  ```
+</Accordion>
+
+## Interactive Chat
+
+The AI chat command provides a rich interactive session:
+
+```bash
+my-api ai chat
+```
+
+**Features:**
+
+<CardGroup cols={2}>
+  <Card title="Slash Commands" icon="slash">
+    `/help`, `/model`, `/use-provider`, `/clear` for session control
+  </Card>
+  <Card title="Auto-Completion" icon="wand-magic-sparkles">
+    Tab completion for commands and file paths
+  </Card>
+  <Card title="Multi-line Input" icon="lines-leaning">
+    Press `Esc+Enter` to submit multi-line messages
+  </Card>
+  <Card title="Status Bar" icon="signal">
+    Live token usage, cost, and performance metrics
+  </Card>
+</CardGroup>
+
+**Status bar shows:**
+
+```
+[Provider: openai | Model: gpt-4o-mini | Tokens: 234→89 | Cost: $0.0012 | 45.2 tok/s]
+```
+
+## JSON Output
+
+All commands support `--json` for scripting and automation:
+
+```bash
+# Health status as JSON
+my-api health status --json | jq '.health_percentage'
+
+# AI usage as JSON
+my-api ai usage --json | jq '.total_cost'
+
+# Scheduler tasks as JSON
+my-api tasks list --json | jq '.[] | select(.status=="active")'
+```
+
+## CLI Architecture
+
+The CLI is built with [Typer](https://typer.tiangolo.com/) and structured as command groups:
+
+```
+app/cli/
+├── main.py              # CLI entry point
+├── health.py            # Health monitoring commands
+├── ai.py                # AI service commands
+├── auth.py              # Auth service commands
+├── tasks.py             # Scheduler commands
+├── rag.py               # RAG commands
+├── comms.py             # Communications commands
+├── llm.py               # LLM catalog commands
+├── slash_commands.py    # Interactive chat commands
+├── chat_completer.py    # Tab completion
+└── status_line.py       # Chat session status bar
+```
+
+## Conditional Commands
+
+Commands are only available if the corresponding component or service is present:
+
+```python
+# From app/cli/main.py
+
+# Only register tasks commands if scheduler is present
+try:
+    tasks_module = importlib.import_module("app.cli.tasks")
+    app.add_typer(tasks_module.app, name="tasks")
+except ImportError:
+    pass  # Scheduler not available
+```
+
+**This means:**
+- No AI service → no `ai` commands
+- No scheduler → no `tasks` commands
+- No auth → no `auth` commands
+
+The CLI adapts to your stack automatically.
+
+## Health Probe for Monitoring
+
+Use `health probe` in scripts and monitoring systems:
+
+```bash
+#!/bin/bash
+#HealthCheck script
+
+if my-api health probe; then
+    echo "System healthy"
+    exit 0
+else
+    echo "System unhealthy"
+    exit 1
+fi
+```
+
+**Difference from `health status`:**
+
+| Command | Exit Code | Use Case |
+|---------|-----------|----------|
+| `health status` | Always 0 | Inspection and debugging |
+| `health probe` | 1 if unhealthy | Monitoring and automation |
+
+## Rich Terminal Output
+
+The CLI uses [Rich](https://rich.readthedocs.io/) for beautiful terminal output:
+
+- Color-coded status indicators
+- Formatted tables and trees
+- Progress bars for long operations
+- Syntax highlighting for code and JSON
+- Panels and boxes for structured data
+
+## System Intelligence
+
+The CLI shares the same system intelligence that powers Overseer and Illiana:
+
+- Real-time component health from the `/health/` endpoint
+- Component metadata and metrics
+- Service configuration and status
+- Job queues and task scheduling
+
+Query worker queues, scheduler activity, database state, AI usage, and service configuration—all without leaving the CLI.
+
+## Examples
+
+<Accordion title="Check if scheduler has pending tasks">
+  ```bash
+  # List upcoming tasks
+  my-api tasks upcoming
+
+  # Or use JSON for scripting
+  PENDING=$(my-api tasks list --json | jq '[.[] | select(.status=="active")] | length')
+  if [ "$PENDING" -gt 0 ]; then
+      echo "$PENDING tasks pending"
+  fi
+  ```
+</Accordion>
+
+<Accordion title="Monitor AI service costs">
+  ```bash
+  # View usage summary
+  my-api ai usage
+
+  # Extract total cost
+  COST=$(my-api ai usage --json | jq -r '.total_cost')
+  echo "Total AI spend: \$$COST"
+  ```
+</Accordion>
+
+<Accordion title="Interactive debugging session">
+  ```bash
+  # Chat with system context and codebase access
+  my-api ai chat --rag --collection mycode --sources
+
+  # Ask questions like:
+  # "What's the current worker queue depth?"
+  # "Show me how authentication works"
+  # "Why is the database connection count high?"
+  ```
+</Accordion>
+
+<Accordion title="Generate system health report">
+  ```bash
+  # Create timestamped health report
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  my-api health status --detailed > "health_report_${TIMESTAMP}.txt"
+  ```
+</Accordion>
+
+## Development Workflow
+
+Common CLI usage during development:
+
+```bash
+# Start development server
+make run-dev
+
+# In another terminal, monitor health
+watch -n 5 'my-api health status'
+
+# Test AI integration
+my-api ai chat
+
+# Check scheduler
+my-api tasks list
+
+# Index codebase for RAG
+my-api rag index ./app --collection dev
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Overseer" icon="gauge" href="/features/overseer">
+    Web-based system dashboard
+  </Card>
+  <Card title="Illiana" icon="robot" href="/features/illiana">
+    Conversational AI operator
+  </Card>
+</CardGroup>

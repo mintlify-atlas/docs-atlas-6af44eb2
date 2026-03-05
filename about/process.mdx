@@ -1,0 +1,322 @@
+---
+title: "Development Process"
+description: "How Aegis Stack is built and the workflow that powers confident iteration"
+---
+
+## Test-Driven Development Done Right
+
+Very early on in the development of Aegis Stack, the goal was clear: true Test-Driven Development (TDD). Not the kind you say you do in interviews, but the kind that lets you move fast, make changes, revert them, refactor them - all within days.
+
+<Note>
+  TDD gives the ability to iterate quickly with confidence. There have been way too many "Fuck, if only we had tests" moments in most careers. Aegis Stack was built to avoid that life.
+</Note>
+
+## The Testing Philosophy
+
+The testing approach is nothing fancy. It's paranoid, thorough, and effective:
+
+<CardGroup cols={2}>
+  <Card title="1. Generate" icon="1">
+    Create a fresh project with specific components
+  </Card>
+  <Card title="2. Install" icon="2">
+    Install dependencies and set up environment
+  </Card>
+  <Card title="3. Validate" icon="3">
+    Run lint, typecheck, and all tests
+  </Card>
+  <Card title="4. Verify" icon="4">
+    Confirm structure matches expectations
+  </Card>
+</CardGroup>
+
+That's it. **No mocks. No elaborate test fixtures.** Just "does the generated project actually work?"
+
+## Testing All The Combinations
+
+The test suite spins up every valid combination:
+
+```python
+from aegis.testing import ProjectGenerator
+
+def test_base_stack():
+    """Test minimal stack - just the core."""
+    project = ProjectGenerator().generate(
+        name="base-test",
+        components=[]
+    )
+    project.install()
+    project.validate()
+
+def test_scheduler_stack():
+    """Test stack with scheduler component."""
+    project = ProjectGenerator().generate(
+        name="scheduler-test",
+        components=["scheduler"]
+    )
+    project.install()
+    project.validate()
+
+def test_worker_stack():
+    """Test stack with worker component."""
+    project = ProjectGenerator().generate(
+        name="worker-test",
+        components=["worker"]
+    )
+    project.install()
+    project.validate()
+
+def test_full_stack():
+    """Test everything together."""
+    project = ProjectGenerator().generate(
+        name="full-test",
+        components=["scheduler", "worker"],
+        services=["auth", "ai", "comms"]
+    )
+    project.install()
+    project.validate()
+```
+
+<Accordion title="Component combinations tested">
+  - Base stack (FastAPI only)
+  - Scheduler only
+  - Worker only
+  - Database only
+  - Scheduler + Worker
+  - Database + Worker
+  - Database + Scheduler
+  - Full stack with all components
+  - Auth service variations
+  - AI service variations
+  - All services combined
+
+  Each combination is generated from scratch and validated. If something breaks in the template, we know within seconds.
+</Accordion>
+
+## Why This Works
+
+The secret is the architecture. Because everything is template-driven and modular, testing is just **regeneration + validation**. The templates ARE the product.
+
+```bash
+# Make a change to a template
+vim aegis/templates/base/{{project_name}}/api/main.py
+
+# Run tests - all combinations regenerate and validate
+make test
+
+# If something breaks, you know immediately which combination failed
+```
+
+### Pattern Recognition
+
+When adding new components, follow the same pattern:
+
+1. **Scheduler component** → Same pattern as worker
+2. **Auth service** → Same pattern as AI service  
+3. **Comms service** → Same pattern as auth
+
+Each time, the tests validate it works with every other component - not just in isolation, but **in combination**.
+
+<Note>
+  Here's what's surprising: adding new components gets *easier* over time, not harder. That's the foundation - not "good enough for now" code that becomes technical debt, but actual tested, validated, proven patterns you can build on with confidence.
+</Note>
+
+## The Development Workflow
+
+### Daily Iteration
+
+```bash
+# 1. Make changes to templates
+vim aegis/templates/...
+
+# 2. Run quick tests (skip slow ones)
+make test-quick
+# Or: uv run pytest -q -m "not slow"
+
+# 3. Fix any issues
+
+# 4. Run full suite before committing
+make check
+```
+
+### Adding New Components
+
+```bash
+# 1. Create component template
+mkdir -p aegis/templates/components/new-component
+
+# 2. Write component tests
+vim tests/test_new_component.py
+
+# 3. Implement component (TDD style)
+# - Write test
+# - Run test (it fails)
+# - Implement feature
+# - Run test (it passes)
+# - Refactor
+
+# 4. Validate with all combinations
+make test
+```
+
+### Refactoring with Confidence
+
+Fast iteration requires solid ground. The paranoid testing gives that ground:
+
+```bash
+# Want to refactor the database layer?
+# 1. Tests define current behavior
+make test
+
+# 2. Make changes
+vim aegis/templates/components/database/...
+
+# 3. Tests verify nothing broke
+make test
+
+# 4. If tests pass, refactoring is safe
+git commit -m "refactor(database): improve connection pooling"
+```
+
+<CardGroup cols={2}>
+  <Card title="Without Tests" icon="triangle-exclamation">
+    - Scared to refactor
+    - Weekend deployments
+    - "Hope it works" mentality
+    - Technical debt accumulates
+  </Card>
+  <Card title="With Tests" icon="check">
+    - Confident refactoring
+    - Deploy multiple times daily
+    - Know it works
+    - Clean code stays clean
+  </Card>
+</CardGroup>
+
+## The Makefile: Central Automation
+
+All common tasks are automated:
+
+```makefile
+# Install dependencies
+make install
+
+# Run linting
+make lint
+
+# Auto-fix lint issues
+make fix
+
+# Run type checking
+make typecheck
+
+# Run tests
+make test
+
+# Run everything (lint + typecheck + tests)
+make check
+
+# Serve documentation locally
+make docs-serve
+```
+
+### Pre-Commit Hooks
+
+Install hooks to catch issues before committing:
+
+```bash
+# Install hooks
+pre-commit install
+
+# Now these run automatically on commit:
+# - ruff lint
+# - ruff format
+# - mypy typecheck
+# - trailing whitespace removal
+```
+
+## Continuous Integration
+
+GitHub Actions runs the same checks:
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v1
+      - run: uv sync --all-extras
+      - run: make check
+```
+
+**What gets tested in CI:**
+
+- All component combinations
+- All service combinations
+- Linting and formatting
+- Type checking
+- Documentation builds
+
+## The Benefits
+
+This workflow enables:
+
+### Fast Iteration
+
+Make changes confidently, knowing tests will catch regressions:
+
+```bash
+# Make a breaking change
+vim aegis/templates/base/...
+
+# Tests immediately show what broke
+make test
+# FAILED tests/test_scheduler_stack.py::test_scheduler_health
+
+# Fix it
+vim aegis/templates/components/scheduler/...
+
+# Verify fix
+make test
+# PASSED
+```
+
+### Confident Refactoring
+
+Refactor without fear:
+
+- Tests define expected behavior
+- Changes that break behavior fail immediately
+- Safe refactorings pass all tests
+
+### Pattern Evolution
+
+Learn and improve patterns over time:
+
+- Each component follows proven patterns
+- Tests validate patterns work together
+- New patterns emerge and get codified
+- Best practices become automated
+
+### Peace of Mind
+
+At the end of the day, this is about peace:
+
+> "I just want to write code and have the confidence to know that it works. If something goes wrong, I don't want to spend days tracking it down."
+
+**TDD isn't just a practice - it's a lifestyle that enables:**
+
+- Sleeping well after deployments
+- Refactoring without dread
+- Onboarding with confidence
+- Building on solid ground
+
+<Note>
+  Fast iteration requires solid ground. The paranoid testing gives that ground. And when you have that ground, you can take more risks and move faster.
+</Note>

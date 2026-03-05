@@ -1,0 +1,218 @@
+---
+title: Installation
+description: Install Aegis Stack and set up your development environment
+---
+
+## Prerequisites
+
+Before installing Aegis Stack, ensure you have the following:
+
+<CardGroup cols={2}>
+  <Card title="Python 3.11+" icon="python">
+    Python 3.11 or higher is required. Aegis Stack supports Python 3.11, 3.12, 3.13, and 3.14.
+  </Card>
+  <Card title="Docker & Docker Compose" icon="docker">
+    Required for the standard development workflow. Generated projects use Docker for consistent environments and service dependencies.
+  </Card>
+</CardGroup>
+
+<Note>
+**Why Docker?** Generated projects use Docker Compose for Redis, PostgreSQL, health monitoring, and consistent development environments. While you can run components individually, `make serve` provides the best developer experience.
+</Note>
+
+## Installation Methods
+
+Choose the installation method that works best for your workflow:
+
+<Tabs>
+  <Tab title="uvx (Instant)">
+    The fastest way to use Aegis Stack without installation:
+
+    ```bash
+    uvx aegis-stack init my-api
+    ```
+
+    <Info>
+    `uvx` runs the tool directly without installing it globally. Perfect for one-off project creation or trying Aegis Stack for the first time.
+    </Info>
+  </Tab>
+
+  <Tab title="uv tool install">
+    Install as a persistent tool using `uv`:
+
+    ```bash
+    uv tool install aegis-stack
+    aegis init my-api
+    ```
+
+    The CLI will be available as both `aegis` and `aegis-stack`.
+  </Tab>
+
+  <Tab title="pip">
+    Install using pip in your Python environment:
+
+    ```bash
+    pip install aegis-stack
+    aegis init my-api
+    ```
+
+    <Warning>
+    If you use `pip`, we recommend installing in a dedicated virtual environment to avoid dependency conflicts.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Verify Installation
+
+After installation, verify that Aegis Stack is working:
+
+<Steps>
+  <Step title="Check the version">
+    ```bash
+    aegis --version
+    ```
+
+    You should see output like:
+    ```
+    aegis-stack version 0.6.0
+    ```
+  </Step>
+
+  <Step title="View available commands">
+    ```bash
+    aegis --help
+    ```
+
+    This displays all available commands including `init`, `add`, `remove`, and `update`.
+  </Step>
+
+  <Step title="Test Docker setup">
+    Ensure Docker is running:
+    ```bash
+    docker --version
+    docker compose version
+    ```
+
+    Both commands should return version information without errors.
+  </Step>
+</Steps>
+
+## Quick Health Check
+
+Create a minimal project to verify everything works:
+
+```bash
+# Create test project
+uvx aegis-stack init test-project --no-interactive --yes
+
+# Navigate and start
+cd test-project
+uv sync
+cp .env.example .env
+make serve
+```
+
+Your API should be available at `http://localhost:8000` with docs at `http://localhost:8000/docs`.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Command not found: aegis">
+    If you installed with `pip`, ensure your Python scripts directory is in your PATH:
+
+    ```bash
+    # For Linux/macOS
+    export PATH="$HOME/.local/bin:$PATH"
+
+    # Or use uv tool instead
+    uv tool install aegis-stack
+    ```
+  </Accordion>
+
+  <Accordion title="Docker connection errors">
+    Ensure Docker Desktop is running:
+
+    ```bash
+    # Start Docker Desktop, then verify
+    docker ps
+    ```
+
+    If Docker is running but you still see errors, try:
+    ```bash
+    docker compose down
+    docker system prune
+    ```
+  </Accordion>
+
+  <Accordion title="Python version issues">
+    Aegis Stack requires Python 3.11+. Check your version:
+
+    ```bash
+    python --version
+    ```
+
+    If you need to install a newer Python version, use [pyenv](https://github.com/pyenv/pyenv) or download from [python.org](https://www.python.org/downloads/).
+  </Accordion>
+
+  <Accordion title="Permission errors on Linux">
+    If you see permission errors with Docker, add your user to the docker group:
+
+    ```bash
+    sudo usermod -aG docker $USER
+    newgrp docker
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Development Setup
+
+If you want to contribute to Aegis Stack or modify the templates:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/lbedner/aegis-stack.git
+    cd aegis-stack
+    ```
+  </Step>
+
+  <Step title="Install development dependencies">
+    ```bash
+    uv sync --all-extras
+    ```
+
+    This installs the package in editable mode with all dev dependencies.
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    make test
+    ```
+  </Step>
+
+  <Step title="Use local templates">
+    Generate projects using your local template changes:
+    ```bash
+    aegis init my-project --dev
+    ```
+
+    The `--dev` flag reads templates from your working tree, including uncommitted changes.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create your first Aegis Stack project in minutes
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/init">
+    Explore all available CLI commands
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Understand how Aegis Stack works
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/components/backend">
+    Learn about available infrastructure components
+  </Card>
+</CardGroup>

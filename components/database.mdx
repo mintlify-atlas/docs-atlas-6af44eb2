@@ -1,0 +1,567 @@
+---
+title: Database
+description: SQLModel ORM with async support for SQLite or PostgreSQL
+icon: database
+---
+
+The Database component provides production-ready database connectivity with SQLModel ORM, automatic migrations, and async/sync session management. Choose between SQLite for simplicity or PostgreSQL for production scale.
+
+## What It Does
+
+The Database component provides:
+
+- **SQLModel ORM**: Type-safe database models using Pydantic and SQLAlchemy
+- **Async Support**: Non-blocking database operations with asyncio
+- **Multiple Engines**: SQLite for development, PostgreSQL for production
+- **Session Management**: Context managers for automatic transaction handling
+- **Migrations**: Alembic integration for schema changes (PostgreSQL)
+- **Health Checks**: Database connectivity monitoring
+
+## When To Use
+
+Add the Database component when you need:
+
+- **Persistent Storage**: Store data that survives application restarts
+- **Relational Data**: Model relationships between entities
+- **Complex Queries**: Use SQL for advanced data retrieval
+- **User Management**: Store user accounts (required for auth service)
+- **Transaction Support**: Ensure data consistency with ACID guarantees
+
+<Note>
+  The Database component is required by the Auth service. If you add Auth, Database will be automatically included.
+</Note>
+
+## Adding to Your Project
+
+<Tabs>
+  <Tab title="New Project">
+    Include the database component at project creation:
+    
+    ```bash
+    aegis init my-app --components database
+    ```
+    
+    You'll be prompted to choose the database engine:
+    - **sqlite**: Simple, file-based database (default)
+    - **postgres**: Production-ready relational database
+  </Tab>
+
+  <Tab title="Existing Project">
+    Add the database component to an existing project:
+    
+    ```bash
+    aegis add database --project-path ./my-app
+    ```
+    
+    The CLI will:
+    1. Prompt for database engine (sqlite or postgres)
+    2. Add database files and configuration
+    3. Update pyproject.toml with dependencies
+    4. Add docker-compose service (if postgres)
+  </Tab>
+</Tabs>
+
+## Configuration
+
+<Tabs>
+  <Tab title="SQLite">
+    Configure SQLite in your `.env` file:
+    
+    ```bash
+    # Database Configuration
+    DATABASE_URL=sqlite:///./data/app.db
+    DATABASE_ENGINE_ECHO=false    # Log SQL queries
+    ```
+    
+    SQLite stores data in a single file at `./data/app.db`.
+    
+    <Note>
+      SQLite is perfect for development and small deployments. The database file is portable and requires no separate server.
+    </Note>
+  </Tab>
+
+  <Tab title="PostgreSQL">
+    Configure PostgreSQL in your `.env` file:
+    
+    ```bash
+    # Database Configuration
+    DATABASE_URL=postgresql://user:password@localhost:5432/myapp
+    DATABASE_ENGINE_ECHO=false    # Log SQL queries
+    
+    # Docker Postgres Configuration
+    POSTGRES_USER=postgres
+    POSTGRES_PASSWORD=postgres
+    POSTGRES_DB=myapp
+    ```
+    
+    PostgreSQL requires a running database server:
+    
+    ```bash
+    # Start PostgreSQL via Docker
+    docker-compose up -d postgres
+    ```
+    
+    <Warning>
+      Always change the default PostgreSQL password in production!
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Environment Variables
+
+<ResponseField name="DATABASE_URL" type="string" required>
+  Database connection URL
+  - SQLite: `sqlite:///./data/app.db`
+  - PostgreSQL: `postgresql://user:pass@host:5432/dbname`
+</ResponseField>
+
+<ResponseField name="DATABASE_ENGINE_ECHO" type="boolean" default="false">
+  Log all SQL queries (useful for debugging)
+</ResponseField>
+
+## Key Files Generated
+
+<CodeGroup>
+```python app/core/db.py
+from contextlib import asynccontextmanager, contextmanager
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlmodel import Session, SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+# Sync engine for migrations and CLI
+engine = create_engine(settings.DATABASE_URL)
+
+# Async engine for non-blocking operations
+async_engine = create_async_engine(
+    _get_async_database_url(settings.DATABASE_URL)
+)
+
+# Session factories
+SessionLocal = sessionmaker(class_=Session, bind=engine)
+AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession)
+
+@contextmanager
+def db_session(autocommit: bool = True):
+    """Sync database session with automatic transaction handling"""
+    session = SessionLocal()
+    try:
+        yield session
+        if autocommit:
+            session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+@asynccontextmanager
+async def get_async_session():
+    """Async database session with automatic transaction handling"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+```
+
+```python app/models/user.py
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+
+class User(SQLModel, table=True):
+    """User model example"""
+    __tablename__ = "users"
+    
+    id: int | None = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    username: str = Field(unique=True, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+```
+</CodeGroup>
+
+### Directory Structure
+
+```
+app/
+├── core/
+│   └── db.py                 # Database configuration and sessions
+├── models/
+│   ├── __init__.py
+│   └── user.py               # SQLModel table definitions
+└── migrations/               # Alembic migrations (PostgreSQL)
+    ├── env.py
+    ├── script.py.mako
+    └── versions/
+```
+
+## Usage Examples
+
+### Defining Models
+
+Create database tables using SQLModel:
+
+<Steps>
+  <Step title="Define your model">
+    ```python app/models/post.py
+    from sqlmodel import SQLModel, Field, Relationship
+    from datetime import datetime
+    
+    class Post(SQLModel, table=True):
+        __tablename__ = "posts"
+        
+        id: int | None = Field(default=None, primary_key=True)
+        title: str = Field(max_length=200)
+        content: str
+        author_id: int = Field(foreign_key="users.id")
+        created_at: datetime = Field(default_factory=datetime.utcnow)
+        
+        # Relationships
+        author: "User" = Relationship(back_populates="posts")
+    ```
+  </Step>
+
+  <Step title="Create tables">
+    <Tabs>
+      <Tab title="SQLite">
+        Tables are created automatically:
+        ```python
+        from app.core.db import init_database
+        
+        init_database()  # Creates all tables
+        ```
+      </Tab>
+      
+      <Tab title="PostgreSQL">
+        Use Alembic migrations:
+        ```bash
+        # Create migration
+        alembic revision --autogenerate -m "Add posts table"
+        
+        # Apply migration
+        alembic upgrade head
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Async Queries
+
+Perform non-blocking database operations:
+
+```python
+from app.core.db import get_async_session
+from app.models.user import User
+from sqlmodel import select
+
+async def get_user_by_email(email: str) -> User | None:
+    """Fetch user by email asynchronously"""
+    async with get_async_session() as session:
+        statement = select(User).where(User.email == email)
+        result = await session.exec(statement)
+        return result.first()
+
+async def create_user(email: str, username: str) -> User:
+    """Create a new user"""
+    async with get_async_session() as session:
+        user = User(email=email, username=username)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+```
+
+### Sync Queries
+
+Use sync sessions for CLI commands or migrations:
+
+```python
+from app.core.db import db_session
+from app.models.user import User
+from sqlmodel import select
+
+def list_all_users() -> list[User]:
+    """List all users synchronously"""
+    with db_session() as session:
+        statement = select(User)
+        results = session.exec(statement)
+        return results.all()
+```
+
+### Relationships
+
+Define and query related data:
+
+```python
+from sqlmodel import Relationship
+
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    username: str
+    
+    # One-to-many relationship
+    posts: list["Post"] = Relationship(back_populates="author")
+
+class Post(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    title: str
+    author_id: int = Field(foreign_key="users.id")
+    
+    # Many-to-one relationship
+    author: User = Relationship(back_populates="posts")
+
+# Query with relationships
+async def get_user_with_posts(user_id: int):
+    async with get_async_session() as session:
+        statement = select(User).where(User.id == user_id)
+        result = await session.exec(statement)
+        user = result.first()
+        
+        # Lazy load posts
+        posts = await user.awaitable_attrs.posts
+        return user, posts
+```
+
+## Migrations (PostgreSQL)
+
+<Note>
+  SQLite uses automatic table creation. PostgreSQL requires Alembic migrations for schema changes.
+</Note>
+
+### Creating Migrations
+
+<Steps>
+  <Step title="Modify your models">
+    Make changes to your SQLModel classes:
+    ```python
+    class User(SQLModel, table=True):
+        # ... existing fields ...
+        bio: str | None = Field(default=None)  # New field
+    ```
+  </Step>
+
+  <Step title="Generate migration">
+    ```bash
+    alembic revision --autogenerate -m "Add bio field to users"
+    ```
+    
+    This creates a new migration file in `app/migrations/versions/`.
+  </Step>
+
+  <Step title="Review migration">
+    Check the generated migration file:
+    ```python
+    def upgrade():
+        op.add_column('users', sa.Column('bio', sa.String(), nullable=True))
+    
+    def downgrade():
+        op.drop_column('users', 'bio')
+    ```
+  </Step>
+
+  <Step title="Apply migration">
+    ```bash
+    alembic upgrade head
+    ```
+  </Step>
+</Steps>
+
+### Migration Commands
+
+```bash
+# Show current migration status
+alembic current
+
+# Show migration history
+alembic history
+
+# Rollback one migration
+alembic downgrade -1
+
+# Rollback to specific version
+alembic downgrade <revision>
+
+# Create empty migration (manual SQL)
+alembic revision -m "Custom migration"
+```
+
+## Docker Integration
+
+<Tabs>
+  <Tab title="SQLite">
+    SQLite data is persisted in a Docker volume:
+    
+    ```yaml docker-compose.yml
+    services:
+      webserver:
+        volumes:
+          - ./data:/app/data    # Persist database file
+    ```
+  </Tab>
+
+  <Tab title="PostgreSQL">
+    PostgreSQL runs as a separate service:
+    
+    ```yaml docker-compose.yml
+    services:
+      postgres:
+        image: postgres:16-alpine
+        environment:
+          POSTGRES_USER: ${POSTGRES_USER}
+          POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+          POSTGRES_DB: ${POSTGRES_DB}
+        volumes:
+          - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+    
+    volumes:
+      postgres_data:
+    ```
+  </Tab>
+</Tabs>
+
+## Dependencies
+
+The Database component installs:
+
+<CardGroup cols={2}>
+  <Card title="SQLModel" icon="table">
+    ORM built on SQLAlchemy and Pydantic
+    ```
+    sqlmodel>=0.0.14
+    sqlalchemy>=2.0.0
+    ```
+  </Card>
+  
+  <Card title="Async Driver" icon="bolt">
+    Database-specific async driver:
+    - **SQLite**: `aiosqlite>=0.19.0`
+    - **PostgreSQL**: `asyncpg>=0.29.0`
+  </Card>
+  
+  <Card title="Alembic" icon="code-branch">
+    Database migration tool (PostgreSQL)
+    ```
+    alembic>=1.12.0
+    ```
+  </Card>
+  
+  <Card title="psycopg2-binary" icon="plug">
+    PostgreSQL adapter (sync operations)
+    ```
+    psycopg2-binary>=2.9.9
+    ```
+  </Card>
+</CardGroup>
+
+## Monitoring
+
+The Database integrates with Overseer:
+
+- **Connection Status**: See if database is reachable
+- **Response Time**: Monitor query latency
+- **Table Counts**: View number of records per table
+- **Migration Status**: Check applied migrations (PostgreSQL)
+
+## Common Patterns
+
+### Dependency Injection
+
+Use FastAPI dependencies for database access:
+
+```python
+from fastapi import Depends, APIRouter
+from app.core.db import get_async_session
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+router = APIRouter()
+
+@router.get("/users/{user_id}")
+async def get_user(
+    user_id: int,
+    session: AsyncSession = Depends(get_async_session)
+):
+    statement = select(User).where(User.id == user_id)
+    result = await session.exec(statement)
+    return result.first()
+```
+
+### Pagination
+
+Implement efficient pagination:
+
+```python
+async def list_users(skip: int = 0, limit: int = 100):
+    async with get_async_session() as session:
+        statement = select(User).offset(skip).limit(limit)
+        result = await session.exec(statement)
+        return result.all()
+```
+
+### Bulk Operations
+
+Insert multiple records efficiently:
+
+```python
+async def create_users_bulk(users: list[dict]):
+    async with get_async_session() as session:
+        for user_data in users:
+            user = User(**user_data)
+            session.add(user)
+        await session.commit()
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused (PostgreSQL)">
+    Ensure PostgreSQL is running:
+    ```bash
+    docker-compose ps postgres
+    docker-compose up -d postgres
+    ```
+  </Accordion>
+
+  <Accordion title="Table not found">
+    Initialize database or run migrations:
+    - **SQLite**: `init_database()` in your startup code
+    - **PostgreSQL**: `alembic upgrade head`
+  </Accordion>
+
+  <Accordion title="Foreign key constraint failed (SQLite)">
+    SQLite foreign keys are enabled automatically. Check that referenced records exist.
+  </Accordion>
+
+  <Accordion title="Migration conflicts">
+    If migrations are out of sync:
+    ```bash
+    # Check current state
+    alembic current
+    
+    # Stamp database with current code version
+    alembic stamp head
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Backend" icon="server" href="/components/backend">
+    Use database in your API endpoints
+  </Card>
+  
+  <Card title="Worker" icon="gears" href="/components/worker">
+    Access database from background tasks
+  </Card>
+  
+  <Card title="Scheduler" icon="clock" href="/components/scheduler">
+    Persist scheduled jobs to database
+  </Card>
+</CardGroup>

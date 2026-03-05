@@ -1,0 +1,663 @@
+---
+title: 'aegis deploy-*'
+description: 'Deploy Aegis Stack projects to remote servers'
+---
+
+## Overview
+
+Aegis provides a suite of deployment commands for managing production deployments to remote servers. These commands handle server provisioning, file synchronization, Docker container management, and monitoring.
+
+<Note>
+All deploy commands require the ingress component (Traefik) to be enabled in your project.
+</Note>
+
+## Command Suite
+
+<CardGroup cols={2}>
+  <Card title="deploy-init" icon="gear" href="#deploy-init">
+    Initialize deployment configuration
+  </Card>
+  <Card title="deploy-setup" icon="server" href="#deploy-setup">
+    Provision remote server
+  </Card>
+  <Card title="deploy" icon="rocket" href="#deploy">
+    Deploy project to server
+  </Card>
+  <Card title="deploy-logs" icon="file-lines" href="#deploy-logs">
+    View deployment logs
+  </Card>
+  <Card title="deploy-status" icon="circle-info" href="#deploy-status">
+    Check service status
+  </Card>
+  <Card title="deploy-stop" icon="stop" href="#deploy-stop">
+    Stop all services
+  </Card>
+  <Card title="deploy-restart" icon="rotate" href="#deploy-restart">
+    Restart all services
+  </Card>
+  <Card title="deploy-shell" icon="terminal" href="#deploy-shell">
+    Open shell in container
+  </Card>
+</CardGroup>
+
+---
+
+## deploy-init
+
+Initialize deployment configuration for this project.
+
+### Command Syntax
+
+```bash
+aegis deploy-init [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--host" type="string">
+  Server IP address or hostname.
+  
+  **Aliases:** `-h`
+</ParamField>
+
+<ParamField path="--user" type="string" default="root">
+  SSH user for deployment.
+  
+  **Aliases:** `-u`
+</ParamField>
+
+<ParamField path="--path" type="string">
+  Deployment path on server. Defaults to `/opt/{project_name}`.
+  
+  **Aliases:** `-p`
+</ParamField>
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Initialize with server IP
+aegis deploy-init --host 192.168.1.100
+
+# Custom user and path
+aegis deploy-init --host myserver.com --user deploy --path /var/www/myapp
+
+# Interactive (prompts for host)
+aegis deploy-init
+```
+
+### Output
+
+```bash
+$ aegis deploy-init --host 192.168.1.100
+
+Deploy configuration saved to .aegis/deploy.yml
+   Host: 192.168.1.100
+   User: root
+   Path: /opt/my-app
+   Docker Context: my-app-remote
+
+Note: Consider adding .aegis/ to .gitignore to avoid committing deploy config
+```
+
+### Configuration File
+
+Creates `.aegis/deploy.yml`:
+
+```yaml
+server:
+  host: 192.168.1.100
+  user: root
+  path: /opt/my-app
+
+docker:
+  context: my-app-remote
+```
+
+---
+
+## deploy-setup
+
+Provision a remote server for deployment.
+
+### Command Syntax
+
+```bash
+aegis deploy-setup [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### What It Does
+
+1. **Connects to server** via SSH
+2. **Installs Docker** and Docker Compose
+3. **Configures firewall** (UFW)
+4. **Opens ports** 22 (SSH), 80 (HTTP), 443 (HTTPS)
+5. **Creates deployment directory**
+6. **Sets up Docker permissions**
+
+### Examples
+
+```bash
+# Setup server (uses config from deploy-init)
+aegis deploy-setup
+
+# Setup specific project
+aegis deploy-setup --project-path ../my-app
+```
+
+### Output
+
+```bash
+$ aegis deploy-setup
+
+Setting up server at root@192.168.1.100...
+Checking SSH connectivity...
+Copying setup script to server...
+Running server setup (this may take a few minutes)...
+
+[Server output...]
+- Installing Docker
+- Installing Docker Compose
+- Configuring firewall
+- Opening ports 22, 80, 443
+
+Server setup complete!
+Next: Run 'aegis deploy' to deploy your application
+```
+
+### Requirements
+
+- SSH access to server (password or key-based)
+- Server must be running Ubuntu/Debian
+- Root or sudo access on server
+
+---
+
+## deploy
+
+Deploy the project to the configured server.
+
+### Command Syntax
+
+```bash
+aegis deploy [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--build / --no-build" type="boolean" default={true}>
+  Build images before deploying.
+</ParamField>
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### What It Does
+
+1. **Syncs files** to server via rsync
+2. **Stops existing services**
+3. **Builds Docker images** on remote server
+4. **Starts services** using docker-compose
+5. **Restarts Traefik** to discover new containers
+
+### Examples
+
+```bash
+# Deploy with build
+aegis deploy
+
+# Deploy without rebuilding
+aegis deploy --no-build
+
+# Deploy specific project
+aegis deploy --project-path ../my-app
+```
+
+### Output
+
+```bash
+$ aegis deploy
+
+Deploying to 192.168.1.100...
+Syncing files to server...
+sending incremental file list
+app/
+app/backend/
+...
+
+Stopping existing services...
+Building and starting services on server...
+[+] Building 45.2s (12/12) FINISHED
+[+] Running 5/5
+ ✔ Container my-app-redis-1      Started
+ ✔ Container my-app-database-1   Started
+ ✔ Container my-app-webserver-1  Started
+ ✔ Container my-app-worker-1     Started
+ ✔ Container my-app-traefik-1    Started
+
+Deployment complete!
+   Application running at: http://192.168.1.100
+   Overseer dashboard: http://192.168.1.100/dashboard/
+   View logs: aegis deploy-logs
+   Check status: aegis deploy-status
+```
+
+### Excluded Files
+
+The following are excluded from sync:
+- `.git/`
+- `__pycache__/`
+- `.venv/`
+- `*.pyc`
+- `.pytest_cache/`
+- `.ruff_cache/`
+- `data/` (database files)
+- `.env` (synced separately)
+- `.aegis/`
+
+---
+
+## deploy-logs
+
+View logs from the deployed application.
+
+### Command Syntax
+
+```bash
+aegis deploy-logs [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--follow / --no-follow" type="boolean" default={true}>
+  Follow log output (like `tail -f`).
+  
+  **Aliases:** `-f`
+</ParamField>
+
+<ParamField path="--service" type="string">
+  Show logs for specific service.
+  
+  **Aliases:** `-s`
+</ParamField>
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Follow all logs
+aegis deploy-logs
+
+# Show logs without following
+aegis deploy-logs --no-follow
+
+# Logs for specific service
+aegis deploy-logs --service webserver
+
+# Follow worker logs
+aegis deploy-logs --service worker
+```
+
+### Output
+
+```bash
+$ aegis deploy-logs --service webserver
+
+webserver-1  | INFO:     Started server process [1]
+webserver-1  | INFO:     Waiting for application startup.
+webserver-1  | INFO:     Application startup complete.
+webserver-1  | INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+---
+
+## deploy-status
+
+Check the status of deployed services.
+
+### Command Syntax
+
+```bash
+aegis deploy-status [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Check status
+aegis deploy-status
+
+# Status of specific project
+aegis deploy-status --project-path ../my-app
+```
+
+### Output
+
+```bash
+$ aegis deploy-status
+
+Service status on 192.168.1.100:
+NAME                  IMAGE                STATUS         PORTS
+my-app-webserver-1    my-app-webserver     Up 2 hours     0.0.0.0:8000->8000/tcp
+my-app-worker-1       my-app-worker        Up 2 hours
+my-app-redis-1        redis:7-alpine       Up 2 hours     0.0.0.0:6379->6379/tcp
+my-app-database-1     my-app-database      Up 2 hours
+my-app-traefik-1      traefik:v2.11        Up 2 hours     0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+```
+
+---
+
+## deploy-stop
+
+Stop all deployed services.
+
+### Command Syntax
+
+```bash
+aegis deploy-stop [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Stop all services
+aegis deploy-stop
+
+# Stop specific project
+aegis deploy-stop --project-path ../my-app
+```
+
+### Output
+
+```bash
+$ aegis deploy-stop
+
+Stopping services...
+[+] Stopping 5/5
+ ✔ Container my-app-webserver-1  Stopped
+ ✔ Container my-app-worker-1     Stopped
+ ✔ Container my-app-redis-1      Stopped
+ ✔ Container my-app-database-1   Stopped
+ ✔ Container my-app-traefik-1    Stopped
+
+Services stopped
+```
+
+---
+
+## deploy-restart
+
+Restart all deployed services.
+
+### Command Syntax
+
+```bash
+aegis deploy-restart [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Restart all services
+aegis deploy-restart
+
+# Restart specific project
+aegis deploy-restart --project-path ../my-app
+```
+
+### Output
+
+```bash
+$ aegis deploy-restart
+
+Restarting services...
+[+] Restarting 5/5
+ ✔ Container my-app-webserver-1  Restarted
+ ✔ Container my-app-worker-1     Restarted
+ ✔ Container my-app-redis-1      Restarted
+ ✔ Container my-app-database-1   Restarted
+ ✔ Container my-app-traefik-1    Restarted
+
+Services restarted
+```
+
+---
+
+## deploy-shell
+
+Open a shell in a deployed container.
+
+### Command Syntax
+
+```bash
+aegis deploy-shell [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--service" type="string" default="webserver">
+  Service to connect to.
+  
+  **Aliases:** `-s`
+</ParamField>
+
+<ParamField path="--project-path" type="string">
+  Path to the project (default: current directory).
+</ParamField>
+
+### Examples
+
+```bash
+# Shell in webserver
+aegis deploy-shell
+
+# Shell in worker
+aegis deploy-shell --service worker
+
+# Shell in redis
+aegis deploy-shell --service redis
+```
+
+### Output
+
+```bash
+$ aegis deploy-shell
+
+root@abc123:/app# ls
+app  tests  pyproject.toml  README.md
+
+root@abc123:/app# python -m app.backend
+...
+```
+
+---
+
+## Deployment Workflow
+
+Complete deployment process:
+
+<CardGroup cols={2}>
+  <Card title="1. Initialize" icon="1">
+    ```bash
+    aegis deploy-init --host 192.168.1.100
+    ```
+    Configure server connection
+  </Card>
+  <Card title="2. Setup Server" icon="2">
+    ```bash
+    aegis deploy-setup
+    ```
+    Install Docker and dependencies
+  </Card>
+  <Card title="3. Deploy" icon="3">
+    ```bash
+    aegis deploy
+    ```
+    Sync files and start services
+  </Card>
+  <Card title="4. Monitor" icon="4">
+    ```bash
+    aegis deploy-logs
+    aegis deploy-status
+    ```
+    Check logs and service health
+  </Card>
+</CardGroup>
+
+### Full Example
+
+```bash
+# 1. Initialize deployment config
+aegis deploy-init --host myserver.com
+
+# 2. Provision the server (once)
+aegis deploy-setup
+
+# 3. Deploy the application
+aegis deploy
+
+# 4. Check status
+aegis deploy-status
+
+# 5. View logs
+aegis deploy-logs --service webserver
+
+# 6. Open shell if needed
+aegis deploy-shell
+
+# 7. Restart if needed
+aegis deploy-restart
+```
+
+## Configuration
+
+### Deploy Config (.aegis/deploy.yml)
+
+```yaml
+server:
+  host: 192.168.1.100
+  user: root
+  path: /opt/my-app
+
+docker:
+  context: my-app-remote
+
+# Optional: TLS configuration
+# domain: example.com
+# acme_email: admin@example.com
+```
+
+### Production Docker Compose
+
+Deployment uses `docker-compose.prod.yml` which:
+- Removes dev volume mounts
+- Enables production profiles
+- Configures Traefik for HTTPS
+- Sets production environment variables
+
+## Troubleshooting
+
+### SSH Connection Failed
+
+```bash
+# Test SSH connection
+ssh root@192.168.1.100
+
+# Add SSH key if needed
+ssh-copy-id root@192.168.1.100
+```
+
+### Services Not Starting
+
+```bash
+# Check logs
+aegis deploy-logs
+
+# Check status
+aegis deploy-status
+
+# Restart services
+aegis deploy-restart
+
+# Open shell and debug
+aegis deploy-shell
+```
+
+### Traefik Not Routing
+
+```bash
+# Check Traefik logs
+aegis deploy-logs --service traefik
+
+# Restart Traefik
+aegis deploy-shell --service traefik
+```
+
+### Port Already in Use
+
+```bash
+# SSH to server
+ssh root@192.168.1.100
+
+# Check what's using the port
+sudo netstat -tlnp | grep :80
+
+# Stop conflicting service
+sudo systemctl stop apache2
+```
+
+<Warning>
+**Backup before deploying**
+
+Always backup your production database before deploying:
+
+```bash
+# On server
+cd /opt/my-app
+cp data/app.db data/app.db.backup
+```
+</Warning>
+
+<Tip>
+Add `.aegis/` to `.gitignore` to avoid committing deployment config:
+
+```bash
+echo ".aegis/" >> .gitignore
+```
+</Tip>
+
+## Related Commands
+
+- [`aegis init`](/cli/init) - Initialize project (include ingress component)
+- [`aegis add`](/cli/add) - Add ingress component to existing project
